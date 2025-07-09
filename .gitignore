@@ -1,0 +1,12 @@
+# logs
+*.log
+
+# build
+build
+
+# vcpkg
+vcpkg
+vcpkg_installed
+
+# testing
+Testing

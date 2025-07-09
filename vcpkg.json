@@ -1,0 +1,13 @@
+{
+  "name": "wiki-graph",
+  "version": "0.1.0",
+  "description": "An embedded property-graph database for wiki-style documents",
+  "dependencies": [
+    "tl-expected",
+    "fmt",
+    "spdlog",
+    "gtest",
+    "benchmark",
+    "pegtl"
+  ]
+}

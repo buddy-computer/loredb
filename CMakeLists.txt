@@ -1,0 +1,130 @@
+cmake_minimum_required(VERSION 3.20)
+project(wiki-graph CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# === Build options ===
+# Enable optional static analysis (clang-tidy / cppcheck)
+option(ENABLE_STATIC_ANALYSIS "Run static analysis with clang-tidy / cppcheck" ON)
+# Treat compiler warnings as errors (helpful for CI pipelines)
+option(ENABLE_WERROR "Treat warnings as errors" ON)
+
+# === Compiler flags ===
+# Per-config optimization / debug options are kept, add common warnings.
+# Additional compile options are appended to all targets.
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    add_compile_options(-Wall -Wextra -Wpedantic)
+    if (ENABLE_WERROR)
+        add_compile_options(-Werror)
+    endif()
+elseif (MSVC)
+    add_compile_options(/W4)
+    if (ENABLE_WERROR)
+        add_compile_options(/WX)
+    endif()
+endif()
+
+# Setup static analysis tools if requested
+if (ENABLE_STATIC_ANALYSIS)
+    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+    if (CLANG_TIDY_EXE)
+        message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
+        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+    endif()
+
+    find_program(CPPCHECK_EXE NAMES cppcheck)
+    if (CPPCHECK_EXE)
+        message(STATUS "cppcheck found: ${CPPCHECK_EXE}")
+        set(CMAKE_CXX_CPPCHECK "${CPPCHECK_EXE};--enable=all;--inline-suppr;--std=c++20")
+    endif()
+endif()
+
+# Compiler flags for performance and safety
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -fsanitize=address -fsanitize=undefined")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+
+# Find required packages
+find_package(PkgConfig REQUIRED)
+find_package(Threads REQUIRED)
+
+# vcpkg dependencies
+find_package(tl-expected CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(GTest CONFIG REQUIRED)
+find_package(benchmark CONFIG REQUIRED)
+find_package(pegtl CONFIG REQUIRED)
+
+# Include directories
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Core library
+add_library(graphdb STATIC
+    src/storage/page_store.cpp
+    src/storage/file_page_store.cpp
+    src/storage/graph_store.cpp
+    src/storage/record.cpp
+    src/storage/simple_index_manager.cpp
+    src/query/executor.cpp
+    src/query/cypher/parser.cpp
+    src/query/cypher/executor.cpp
+    src/transaction/mvcc.cpp
+    src/transaction/mvcc_manager.cpp
+    src/storage/wal_manager.cpp
+    src/util/varint.cpp
+    src/util/crc32.cpp
+    src/util/logger.cpp
+)
+
+target_link_libraries(graphdb 
+    Threads::Threads
+    tl::expected
+    fmt::fmt
+    spdlog::spdlog
+    taocpp::pegtl
+)
+
+# CLI executable
+add_executable(graphdb-cli
+    src/cli/main.cpp
+    src/cli/repl.cpp
+)
+
+target_link_libraries(graphdb-cli graphdb)
+
+# Tests
+add_executable(tests
+    tests/storage/test_page_store.cpp
+    tests/storage/test_file_page_store.cpp
+    tests/storage/test_index_manager.cpp
+    tests/storage/test_wal_manager.cpp
+    tests/query/test_executor.cpp
+    tests/query/test_cypher_parser.cpp
+    tests/util/test_varint.cpp
+    tests/transaction/test_mvcc.cpp
+    tests/transaction/test_mvcc_graph.cpp
+)
+
+target_link_libraries(tests 
+    graphdb
+    GTest::gtest_main
+    GTest::gmock_main
+)
+
+# Benchmarks
+add_executable(benchmarks
+    benchmarks/storage_benchmark.cpp
+    benchmarks/query_benchmark.cpp
+)
+
+target_link_libraries(benchmarks
+    graphdb
+    benchmark::benchmark
+    benchmark::benchmark_main
+)
+
+# Enable testing
+enable_testing()
+add_test(NAME unit_tests COMMAND tests)
