@@ -1,8 +1,8 @@
 #include "page_store.h"
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
-// Implementation would go here for any non-template methods
-// Currently all methods are pure virtual in the base class
+// Empty; this is a header-only interface for now.
+// Implementations are in file_page_store.cpp etc.
 
-}  // namespace graphdb::storage
+}  // namespace loredb::storage

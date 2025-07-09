@@ -1,6 +1,6 @@
 /// \file wal_manager.h
-/// \brief Write-ahead log (WAL) manager for durability and recovery.
-/// \author wiki-graph contributors
+/// \brief Write-ahead logging for ensuring database durability.
+/// \author LoreDB contributors
 /// \ingroup storage
 #pragma once
 
@@ -17,7 +17,7 @@
 #include <chrono>
 #include "page_store.h"
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
 using LSN = uint64_t; // Log Sequence Number
 
@@ -77,8 +77,8 @@ public:
     // Rule-of-five: non-copyable, movable
     WALManager(const WALManager&) = delete;
     WALManager& operator=(const WALManager&) = delete;
-    WALManager(WALManager&&) noexcept = default;
-    WALManager& operator=(WALManager&&) noexcept = default;
+    WALManager(WALManager&&) noexcept = delete;
+    WALManager& operator=(WALManager&&) noexcept = delete;
     /**
      * @brief Construct a WALManager for the given log file path.
      * @param path Path to the WAL file.
@@ -139,4 +139,4 @@ private:
     WALHeader header_;
 };
 
-} // namespace graphdb::storage 
+} // namespace loredb::storage 

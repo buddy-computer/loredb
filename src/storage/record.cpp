@@ -1,7 +1,7 @@
 #include "record.h"
 #include <cstring>
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
 std::vector<uint8_t> RecordSerializer::serialize_properties(const std::vector<Property>& properties) {
     std::vector<uint8_t> buffer;
@@ -124,21 +124,17 @@ RecordSerializer::deserialize_edge(std::span<const uint8_t> data) {
 }
 
 void RecordSerializer::write_varint(std::vector<uint8_t>& buffer, uint64_t value) {
-    uint8_t temp[util::VarInt::MAX_ENCODED_SIZE];
+    uint8_t temp[10];
     size_t len = util::VarInt::encode(value, temp);
     buffer.insert(buffer.end(), temp, temp + len);
 }
 
 util::expected<uint64_t, Error> RecordSerializer::read_varint(std::span<const uint8_t>& data) {
-    uint64_t value;
-    size_t consumed = util::VarInt::decode(data, value);
-    
-    if (consumed == 0) {
-        return util::unexpected(Error{ErrorCode::CORRUPTION, "Invalid varint encoding"});
+    auto result = util::VarInt::decode(data);
+    if (!result.has_value()) {
+        return util::unexpected<storage::Error>(result.error());
     }
-    
-    data = data.subspan(consumed);
-    return value;
+    return result.value();
 }
 
 void RecordSerializer::write_string(std::vector<uint8_t>& buffer, const std::string& str) {
@@ -192,7 +188,7 @@ util::expected<PropertyValue, Error> RecordSerializer::read_property_value(std::
         case PropertyType::STRING: {
             auto str_result = read_string(data);
             if (!str_result.has_value()) {
-                return util::unexpected(str_result.error());
+                return util::unexpected<storage::Error>(str_result.error());
             }
             return PropertyValue{std::move(str_result.value())};
         }
@@ -200,14 +196,14 @@ util::expected<PropertyValue, Error> RecordSerializer::read_property_value(std::
         case PropertyType::INTEGER: {
             auto varint_result = read_varint(data);
             if (!varint_result.has_value()) {
-                return util::unexpected(varint_result.error());
+                return util::unexpected<storage::Error>(varint_result.error());
             }
             return PropertyValue{util::ZigZag::decode(varint_result.value())};
         }
         
         case PropertyType::FLOAT: {
             if (data.size() < sizeof(double)) {
-                return util::unexpected(Error{ErrorCode::CORRUPTION, "Insufficient data for float"});
+                return util::unexpected<storage::Error>(Error{ErrorCode::CORRUPTION, "Insufficient data for float"});
             }
             double value;
             std::memcpy(&value, data.data(), sizeof(double));
@@ -217,7 +213,7 @@ util::expected<PropertyValue, Error> RecordSerializer::read_property_value(std::
         
         case PropertyType::BOOLEAN: {
             if (data.empty()) {
-                return util::unexpected(Error{ErrorCode::CORRUPTION, "Insufficient data for boolean"});
+                return util::unexpected<storage::Error>(Error{ErrorCode::CORRUPTION, "Insufficient data for boolean"});
             }
             bool value = data[0] != 0;
             data = data.subspan(1);
@@ -227,12 +223,12 @@ util::expected<PropertyValue, Error> RecordSerializer::read_property_value(std::
         case PropertyType::BYTES: {
             auto len_result = read_varint(data);
             if (!len_result.has_value()) {
-                return util::unexpected(len_result.error());
+                return util::unexpected<storage::Error>(len_result.error());
             }
             
             size_t len = len_result.value();
             if (data.size() < len) {
-                return util::unexpected(Error{ErrorCode::CORRUPTION, "Insufficient data for bytes"});
+                return util::unexpected<storage::Error>(Error{ErrorCode::CORRUPTION, "Insufficient data for bytes"});
             }
             
             std::vector<uint8_t> bytes(data.begin(), data.begin() + len);
@@ -241,8 +237,8 @@ util::expected<PropertyValue, Error> RecordSerializer::read_property_value(std::
         }
         
         default:
-            return util::unexpected(Error{ErrorCode::CORRUPTION, "Unknown property type"});
+            return util::unexpected<storage::Error>(Error{ErrorCode::CORRUPTION, "Unknown property type"});
     }
 }
 
-}  // namespace graphdb::storage
+}  // namespace loredb::storage

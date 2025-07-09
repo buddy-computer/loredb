@@ -3,7 +3,7 @@
 #include <tao/pegtl.hpp>
 #include <tao/pegtl/contrib/abnf.hpp>
 
-namespace graphdb::query::cypher::grammar {
+namespace loredb::query::cypher::grammar {
 
 using namespace tao::pegtl;
 
@@ -96,6 +96,18 @@ struct node_pattern : seq<
 // Edge patterns
 struct edge_type : seq<one<':'>, identifier> {};
 struct edge_types : star<edge_type> {};
+
+// Variable length path
+struct min_hops : integer {};
+struct max_hops : integer {};
+struct range_spec : sor<
+    seq<min_hops, string<'.','.'>, max_hops>,
+    seq<min_hops, string<'.','.'>>,
+    seq<string<'.','.'>, max_hops>,
+    min_hops // for case like *2
+> {};
+struct variable_length_range : seq<one<'*'>, opt<range_spec>> {};
+
 struct directed_edge : seq<
     one<'-'>,
     one<'['>,
@@ -103,6 +115,8 @@ struct directed_edge : seq<
     opt<identifier>,
     opt_ws,
     opt<edge_types>,
+    opt_ws,
+    opt<variable_length_range>,
     opt_ws,
     opt<property_map>,
     opt_ws,
@@ -116,6 +130,8 @@ struct undirected_edge : seq<
     opt<identifier>,
     opt_ws,
     opt<edge_types>,
+    opt_ws,
+    opt<variable_length_range>,
     opt_ws,
     opt<property_map>,
     opt_ws,
@@ -204,4 +220,4 @@ struct query : seq<
     eof
 > {};
 
-} // namespace graphdb::query::cypher::grammar
+} // namespace loredb::query::cypher::grammar

@@ -36,7 +36,7 @@ A modern, embeddable property graph database engine written in C++20, designed f
 ## Getting Started
 
 - Build with CMake 3.20+ and vcpkg dependencies.
-- Run `graphdb-cli` for the interactive shell.
+- Run `loredb-cli` for the interactive shell.
 - See `tests/` for usage examples and test coverage.
 
 ## Contributing

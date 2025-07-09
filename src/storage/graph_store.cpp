@@ -5,19 +5,23 @@
 #include <chrono>
 #include <algorithm>
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
 GraphStore::GraphStore(std::unique_ptr<PageStore> page_store)
     : page_store_(std::move(page_store)), next_node_id_(1), next_edge_id_(1),
-      node_count_(0), edge_count_(0), current_node_page_offset_(0), current_edge_page_offset_(0) {
+      node_count_(0), edge_count_(0) {
 }
 
 GraphStore::GraphStore(std::unique_ptr<PageStore> page_store,
                        std::shared_ptr<transaction::MVCCManager> mvcc_manager,
                        std::shared_ptr<WALManager> wal_manager)
-    : page_store_(std::move(page_store)), mvcc_manager_(std::move(mvcc_manager)), wal_manager_(std::move(wal_manager)),
-      next_node_id_(1), next_edge_id_(1), node_count_(0), edge_count_(0),
-      current_node_page_offset_(0), current_edge_page_offset_(0) {
+    : page_store_(std::move(page_store)),
+      next_node_id_(1),
+      next_edge_id_(1),
+      node_count_(0),
+      edge_count_(0),
+      mvcc_manager_(std::move(mvcc_manager)),
+      wal_manager_(std::move(wal_manager)) {
 }
 
 GraphStore::~GraphStore() = default;
@@ -557,4 +561,4 @@ util::expected<void, Error> GraphStore::delete_edge(EdgeId edge_id) {
     return {};
 }
 
-}  // namespace graphdb::storage
+}  // namespace loredb::storage

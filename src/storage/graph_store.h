@@ -1,6 +1,6 @@
 /// \file graph_store.h
 /// \brief Graph storage engine supporting MVCC, WAL, and property graph operations.
-/// \author wiki-graph contributors
+/// \author LoreDB contributors
 /// \ingroup storage
 #pragma once
 
@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
 /**
  * @class GraphStore
@@ -169,12 +169,10 @@ private:
     std::mutex page_alloc_mutex_;
     std::vector<PageId> node_pages_;
     std::vector<PageId> edge_pages_;
-    size_t current_node_page_offset_;
-    size_t current_edge_page_offset_;
 
     // Optional MVCC manager
     std::shared_ptr<transaction::MVCCManager> mvcc_manager_;
     std::shared_ptr<WALManager> wal_manager_;
 };
 
-}  // namespace graphdb::storage
+}  // namespace loredb::storage

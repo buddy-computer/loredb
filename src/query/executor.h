@@ -1,6 +1,6 @@
 /// \file executor.h
 /// \brief Query execution engine for property graph queries.
-/// \author wiki-graph contributors
+/// \author LoreDB contributors
 /// \ingroup query
 #pragma once
 
@@ -8,29 +8,14 @@
 #include "../storage/simple_index_manager.h"
 #include "../transaction/mvcc.h"
 #include "../util/expected.h"
+#include "query_types.h"
 #include <atomic>
 #include <memory>
 #include <vector>
 #include <string>
 #include <functional>
 
-namespace graphdb::query {
-
-// Query result types
-struct QueryResult {
-    std::vector<std::string> columns;
-    std::vector<std::vector<std::string>> rows;
-    
-    QueryResult() = default;
-    QueryResult(std::vector<std::string> cols) : columns(std::move(cols)) {}
-    
-    void add_row(std::vector<std::string> row) {
-        rows.push_back(std::move(row));
-    }
-    
-    size_t size() const { return rows.size(); }
-    bool empty() const { return rows.empty(); }
-};
+namespace loredb::query {
 
 /**
  * @class QueryExecutor
@@ -79,7 +64,7 @@ public:
     util::expected<QueryResult, storage::Error> batch_get_nodes(const std::vector<storage::NodeId>& node_ids);
     util::expected<QueryResult, storage::Error> batch_get_edges(const std::vector<storage::EdgeId>& edge_ids);
     
-    // Document-specific queries for wiki-graph use case
+    // Document-specific queries
     util::expected<QueryResult, storage::Error> get_document_backlinks(storage::NodeId document_id);
     util::expected<QueryResult, storage::Error> get_document_outlinks(storage::NodeId document_id);
     util::expected<QueryResult, storage::Error> find_related_documents(storage::NodeId document_id, size_t max_results = 10);
@@ -106,4 +91,4 @@ private:
 // Simplified streaming interfaces (removing C++20 generator dependency)
 // These can be implemented later with proper coroutine support
 
-}  // namespace graphdb::query
+}  // namespace loredb::query

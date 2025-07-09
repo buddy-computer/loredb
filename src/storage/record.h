@@ -8,7 +8,7 @@
 #include <span>
 #include <variant>
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
 // Property value types
 using PropertyValue = std::variant<
@@ -57,4 +57,4 @@ private:
     static util::expected<PropertyValue, Error> read_property_value(std::span<const uint8_t>& data, PropertyType type);
 };
 
-}  // namespace graphdb::storage
+}  // namespace loredb::storage

@@ -1,0 +1,30 @@
+# Wiki-Graph Project Overview
+
+This project implements a graph database from scratch in C++. It is named `wiki-graph` and appears to be designed for handling graph-structured data, possibly with a focus on performance and direct file-based storage.
+
+## Key Features
+
+- **Storage Engine**: A custom storage engine is implemented in `src/storage`. It uses a `FilePageStore` ([src/storage/file_page_store.h](mdc:src/storage/file_page_store.h)) for managing fixed-size pages in a database file, and includes a Write-Ahead Log (`WAL`) for durability ([src/storage/wal_manager.h](mdc:src/storage/wal_manager.h)).
+- **Graph Data Model**: The `GraphStore` ([src/storage/graph_store.h](mdc:src/storage/graph_store.h)) is responsible for managing graph data, including nodes and relationships, on top of the page store.
+- **Query Language**: The database supports the Cypher query language. The parser, abstract syntax tree (AST), and executor are located in `src/query/cypher`.
+- **Transactions & Concurrency**: The system supports transactions with Multi-Version Concurrency Control (MVCC), managed by the `MVCCManager` ([src/transaction/mvcc_manager.h](mdc:src/transaction/mvcc_manager.h)).
+- **Command-Line Interface**: A REPL for interacting with the database is available. The main entry point is in `src/cli/main.cpp`.
+
+## Core Modules
+
+- `src/storage`: The low-level storage layer. It handles file I/O, page caching, record management ([src/storage/record.h](mdc:src/storage/record.h)), and indexing ([src/storage/index_manager.h](mdc:src/storage/index_manager.h)).
+- `src/query`: The query processing layer. This includes the Cypher parser ([src/query/cypher/parser.h](mdc:src/query/cypher/parser.h)), a query planner ([src/query/planner.h](mdc:src/query/planner.h)), and an execution engine ([src/query/executor.h](mdc:src/query/executor.h)).
+- `src/transaction`: Manages concurrency control and transaction semantics, including MVCC and locking.
+- `src/util`: Contains common utilities like a logger ([src/util/logger.h](mdc:src/util/logger.h)), custom error types ([src/util/expected.h](mdc:src/util/expected.h)), and serialization helpers.
+- `src/cli`: The command-line interface for user interaction.
+- `tests/`: Contains unit tests for all modules, using the GoogleTest framework.
+- `benchmarks/`: Contains performance benchmarks for storage and query operations.
+
+## Build and Run
+
+The project uses CMake and vcpkg for dependency management. To build the project:
+
+1.  Make sure you have CMake and a C++ compiler installed.
+2.  `vcpkg` is integrated via `CMakeLists.txt`.
+3.  Run `cmake -B build && cmake --build build`.
+4.  The main executable will be `build/src/cli/wiki-graph-cli`.

@@ -8,14 +8,14 @@
 #include <vector>
 #include <unistd.h>
 
-using namespace graphdb::storage;
-using namespace graphdb::query;
+using namespace loredb::storage;
+using namespace loredb::query;
 
 class BenchmarkFixture : public benchmark::Fixture {
 public:
     void SetUp(const benchmark::State& state) override {
         // Create temporary file for testing
-        std::string db_path = "/tmp/graphdb_benchmark_" + std::to_string(getpid()) + ".db";
+        std::string db_path = "/tmp/loredb_benchmark_" + std::to_string(getpid()) + ".db";
         
         auto page_store = std::make_unique<FilePageStore>(db_path);
         graph_store_ = std::make_unique<GraphStore>(std::move(page_store));
@@ -35,7 +35,7 @@ public:
         graph_store_.reset();
         
         // Clean up temporary file
-        std::string db_path = "/tmp/graphdb_benchmark_" + std::to_string(getpid()) + ".db";
+        std::string db_path = "/tmp/loredb_benchmark_" + std::to_string(getpid()) + ".db";
         unlink(db_path.c_str());
     }
     
@@ -197,6 +197,41 @@ BENCHMARK_DEFINE_F(BenchmarkFixture, EdgeLookup)(benchmark::State& state) {
 }
 
 BENCHMARK_REGISTER_F(BenchmarkFixture, EdgeLookup)->Range(1000, 100000);
+
+// Property Index benchmarks
+BENCHMARK_DEFINE_F(BenchmarkFixture, PropertyIndexCreation)(benchmark::State& state) {
+    auto node_ids = create_test_nodes(state.range(0));
+    for (auto _ : state) {
+        state.PauseTiming();
+        NodeId node_id = node_ids[rng_() % node_ids.size()];
+        std::string key = "prop_1";
+        std::string value = "value_" + std::to_string(rng_() % 1000);
+        state.ResumeTiming();
+
+        index_manager_->index_node_property(node_id, key, value);
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+BENCHMARK_REGISTER_F(BenchmarkFixture, PropertyIndexCreation)->Range(1000, 100000);
+
+BENCHMARK_DEFINE_F(BenchmarkFixture, PropertyIndexLookup)(benchmark::State& state) {
+    // Pre-create nodes and index their properties
+    const size_t num_nodes = state.range(0);
+    auto node_ids = create_test_nodes(num_nodes);
+    for (NodeId node_id : node_ids) {
+        index_manager_->index_node_property(node_id, "prop_1", "value_123");
+    }
+
+    for (auto _ : state) {
+        auto result = index_manager_->find_nodes_by_property("prop_1", "value_123");
+        if (result.empty()) {
+            state.SkipWithError("Failed to find nodes by property");
+        }
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+BENCHMARK_REGISTER_F(BenchmarkFixture, PropertyIndexLookup)->Range(1000, 100000);
+
 
 // Adjacency list benchmarks
 BENCHMARK_DEFINE_F(BenchmarkFixture, AdjacencyLookup)(benchmark::State& state) {

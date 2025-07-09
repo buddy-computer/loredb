@@ -2,7 +2,7 @@
 
 #include "ast.h"
 #include "parser.h"
-#include "../executor.h"
+#include "../query_types.h"
 #include "../../storage/graph_store.h"
 #include "../../storage/simple_index_manager.h"
 #include "../../transaction/mvcc.h"
@@ -11,68 +11,14 @@
 #include <unordered_map>
 #include <vector>
 
-namespace graphdb::query::cypher {
-
-// Variable binding during query execution
-struct VariableBinding {
-    enum class Type {
-        NODE,
-        EDGE,
-        LITERAL
-    };
-    
-    Type type;
-    uint64_t id_value;  // For NODE and EDGE types
-    PropertyValue literal_value;  // For LITERAL type
-    
-    // Default constructor
-    VariableBinding() : type(Type::LITERAL), id_value(0), literal_value(std::string("")) {}
-    
-    // Constructor for NODE/EDGE types
-    VariableBinding(Type t, uint64_t id) : type(t), id_value(id), literal_value(std::string("")) {
-        if (t != Type::NODE && t != Type::EDGE) {
-            throw std::invalid_argument("Invalid type for ID constructor");
-        }
-    }
-    
-    // Constructor for LITERAL type
-    VariableBinding(Type t, PropertyValue value) : type(t), id_value(0), literal_value(std::move(value)) {
-        if (t != Type::LITERAL) {
-            throw std::invalid_argument("Invalid type for literal constructor");
-        }
-    }
-};
-
-using VariableMap = std::unordered_map<std::string, VariableBinding>;
-
-// Execution context for a single query
-struct ExecutionContext {
-    std::shared_ptr<storage::GraphStore> graph_store;
-    std::shared_ptr<storage::SimpleIndexManager> index_manager;
-    transaction::TransactionId tx_id;
-    VariableMap variables;
-    
-    ExecutionContext(std::shared_ptr<storage::GraphStore> gs, 
-                     std::shared_ptr<storage::SimpleIndexManager> im,
-                     transaction::TransactionId tx)
-        : graph_store(std::move(gs)), index_manager(std::move(im)), tx_id(tx) {}
-};
-
-// Result row for intermediate processing
-struct ResultRow {
-    VariableMap bindings;
-    
-    ResultRow() = default;
-    explicit ResultRow(VariableMap vars) : bindings(std::move(vars)) {}
-};
-
-using ResultSet = std::vector<ResultRow>;
+namespace loredb::query::cypher {
 
 // Cypher query executor
 class CypherExecutor {
 public:
     CypherExecutor(std::shared_ptr<storage::GraphStore> graph_store,
-                   std::shared_ptr<storage::SimpleIndexManager> index_manager);
+                   std::shared_ptr<storage::SimpleIndexManager> index_manager,
+                   std::shared_ptr<transaction::MVCCManager> mvcc_manager);
     ~CypherExecutor();
     
     // Execute a Cypher query string
@@ -84,6 +30,7 @@ public:
 private:
     std::shared_ptr<storage::GraphStore> graph_store_;
     std::shared_ptr<storage::SimpleIndexManager> index_manager_;
+    std::shared_ptr<transaction::MVCCManager> mvcc_manager_;
     CypherParser parser_;
     transaction::TransactionManager txn_manager_;
     
@@ -108,6 +55,15 @@ private:
                                                                           const Edge& edge,
                                                                           const Node& to_node,
                                                                           ExecutionContext& ctx);
+    util::expected<ResultSet, storage::Error> match_variable_length_path(const Node& from_node,
+                                                                         const Edge& edge,
+                                                                         const Node& to_node,
+                                                                         ExecutionContext& ctx);
+    util::expected<ResultSet, storage::Error> expand_results(const ResultSet& previous_results,
+                                                             const Node& from_node_pattern,
+                                                             const Edge& edge_pattern,
+                                                             const Node& to_node_pattern,
+                                                             ExecutionContext& ctx);
     util::expected<std::vector<storage::NodeId>, storage::Error> find_nodes_by_pattern(const Node& node, 
                                                                                        ExecutionContext& ctx);
     util::expected<std::vector<storage::EdgeId>, storage::Error> find_edges_by_pattern(const Edge& edge,
@@ -115,19 +71,9 @@ private:
                                                                                        storage::NodeId to_node,
                                                                                        ExecutionContext& ctx);
     
-    // Expression evaluation
-    util::expected<PropertyValue, storage::Error> evaluate_expression(const Expression& expr, 
-                                                                     const VariableMap& variables, 
-                                                                     ExecutionContext& ctx);
-    util::expected<bool, storage::Error> evaluate_boolean_expression(const Expression& expr, 
-                                                                    const VariableMap& variables, 
-                                                                    ExecutionContext& ctx);
-    
     // Helper methods
     QueryResult result_set_to_query_result(const ResultSet& result_set, 
                                           const std::vector<std::string>& columns);
-    std::string property_value_to_string(const PropertyValue& value);
-    std::string variable_binding_to_string(const VariableBinding& binding);
     
     // Property matching
     bool matches_property_constraints(const PropertyMap& constraints,
@@ -149,7 +95,7 @@ private:
     util::expected<QueryResult, storage::Error> apply_limit(const QueryResult& result, 
                                                            const LimitClause& limit);
     util::expected<QueryResult, storage::Error> apply_order_by(const QueryResult& result, 
-                                                              const OrderByClause& order_by);
+                                                              const OrderByClause& /*order_by*/);
 };
 
-} // namespace graphdb::query::cypher
+}

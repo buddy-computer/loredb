@@ -4,13 +4,13 @@
 #include <cstring>
 #include <numeric>
 
-using namespace graphdb::storage;
+using namespace loredb::storage;
 
 class FilePageStoreTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Create a temporary file for testing
-        db_filename_ = "/tmp/test_graphdb_" + std::to_string(getpid()) + ".db";
+        db_filename_ = "/tmp/test_loredb_" + std::to_string(getpid()) + ".db";
         page_store_ = std::make_unique<FilePageStore>(db_filename_);
     }
     

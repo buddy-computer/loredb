@@ -6,7 +6,7 @@
 #include <system_error>
 #include "../util/expected.h"
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
 using PageId = uint64_t;
 using NodeId = uint64_t;
@@ -126,4 +126,4 @@ enum class PropertyType : uint8_t {
     OBJECT = 6
 };
 
-}  // namespace graphdb::storage
+}  // namespace loredb::storage

@@ -2,7 +2,7 @@
 #include "../../src/transaction/mvcc_manager.h"
 #include "../../src/transaction/mvcc.h"
 
-using namespace graphdb::transaction;
+using namespace loredb::transaction;
 
 class MVCCManagerTest : public ::testing::Test {
 protected:
@@ -21,7 +21,7 @@ TEST_F(MVCCManagerTest, ReadWriteVersionVisibility) {
 
     Version v1;
     v1.created_tx_id = tx1;
-    v1.data = graphdb::storage::NodeRecord{};
+    v1.data = loredb::storage::NodeRecord{};
     v1.properties = {};
 
     // Write first version
@@ -41,7 +41,7 @@ TEST_F(MVCCManagerTest, ReadWriteVersionVisibility) {
     // Write second version with tx2
     Version v2;
     v2.created_tx_id = tx2;
-    v2.data = graphdb::storage::NodeRecord{};
+    v2.data = loredb::storage::NodeRecord{};
     v2.properties = {};
     auto wres2 = mvcc_->write_version(42, v2);
     ASSERT_TRUE(wres2.has_value());
@@ -60,11 +60,11 @@ TEST_F(MVCCManagerTest, ReadWriteVersionVisibility) {
 TEST_F(MVCCManagerTest, GarbageCollect) {
     TransactionId tx1 = 1;
     TransactionId tx2 = 2;
-    Version v1{tx1, tx2, graphdb::storage::NodeRecord{}, {}}; // deleted by tx2
+    Version v1{tx1, tx2, loredb::storage::NodeRecord{}, {}}; // deleted by tx2
     mvcc_->write_version(100, v1);
 
     // Add live version
-    Version v2{tx2, 0, graphdb::storage::NodeRecord{}, {}};
+    Version v2{tx2, 0, loredb::storage::NodeRecord{}, {}};
     mvcc_->write_version(100, v2);
 
     // GC with min_active_tx_id = 3 (both tx1 and tx2 finished)

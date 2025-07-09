@@ -1,12 +1,17 @@
 #include "repl.h"
 #include "../util/logger.h"
+#include "../query/cypher/executor.h"
+#include "../storage/file_page_store.h"
+#include "../storage/graph_store.h"
+#include "../storage/simple_index_manager.h"
+#include "../query/executor.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <chrono>
 
-namespace graphdb::cli {
+namespace loredb::cli {
 
 REPL::REPL(const std::string& db_path) : running_(true) {
     LOG_INFO("Initializing REPL with database: {}", db_path);
@@ -15,6 +20,7 @@ REPL::REPL(const std::string& db_path) : running_(true) {
     graph_store_ = std::make_shared<storage::GraphStore>(std::move(page_store_));
     index_manager_ = std::make_shared<storage::SimpleIndexManager>();
     query_executor_ = std::make_unique<query::QueryExecutor>(graph_store_, index_manager_);
+    cypher_executor_ = std::make_unique<query::cypher::CypherExecutor>(graph_store_, index_manager_, std::make_shared<transaction::MVCCManager>(std::make_shared<transaction::TransactionManager>()));
     
     LOG_INFO("REPL initialized successfully");
 }
@@ -49,14 +55,15 @@ void REPL::run() {
 
 void REPL::print_banner() {
     std::cout << R"(
- _____ _____  ___  _____  _   _  ____  _____ 
-|  __ |  __ \/ _ \|  __ \| | | |/ __ \|  __ \
-| |  | | |__) | |_| | |  | | |_| | |  | |  | |
-| |  | |  _  /|  _  | |  | |  _  | |  | |  | |
-| |__| | | \ \| | | | |__| | | | | |__| | |__| |
-|_____/|_|  \_\_| |_|_____/|_| |_|\____/|_____/ 
-                                                
-    Wiki Graph Database CLI
+
+_-_-                      -_____    _-_ _,,   
+ /,                         ' | -,     -/  )  
+ ||      /'\\ ,._-_  _-_   /| |  |`   ~||_<   
+~||     || ||  ||   || \\  || |==||    || \\  
+ ||     || ||  ||   ||/   ~|| |  |,    ,/--|| 
+(  -__, \\,/   \\,  \\,/   ~-____,    _--_-'  
+                          (          (        
+    LoreDB Database CLI
     )" << std::endl;
 }
 
@@ -76,6 +83,7 @@ void REPL::print_help() {
     std::cout << "  outlinks <id>                  - Get document outlinks" << std::endl;
     std::cout << "  related <id> [limit]           - Find related documents" << std::endl;
     std::cout << "  suggest <id> <content>         - Suggest links for document" << std::endl;
+    std::cout << "  cypher <query>                 - Execute a Cypher query" << std::endl;
     std::cout << "  help                           - Show this help" << std::endl;
     std::cout << "  exit                           - Exit the program" << std::endl;
     std::cout << std::endl;
@@ -121,6 +129,8 @@ void REPL::process_command(const std::string& command) {
         cmd_related(args);
     } else if (cmd == "suggest") {
         cmd_suggest(args);
+    } else if (cmd == "cypher") {
+        cmd_cypher(args);
     } else if (cmd == "help") {
         cmd_help(args);
     } else if (cmd == "exit" || cmd == "quit") {
@@ -442,6 +452,21 @@ void REPL::cmd_suggest(const std::string& args) {
     }
 }
 
+void REPL::cmd_cypher(const std::string& args) {
+    if (args.empty()) {
+        std::cout << "Usage: cypher <query>" << std::endl;
+        return;
+    }
+    
+    auto result = cypher_executor_->execute_query(args);
+    
+    if (result.has_value()) {
+        print_query_result(result.value());
+    } else {
+        std::cout << "Query failed: " << result.error().message << std::endl;
+    }
+}
+
 void REPL::cmd_help(const std::string& args) {
     print_help();
 }
@@ -578,4 +603,4 @@ std::vector<storage::Property> REPL::parse_properties(const std::string& props_s
     return properties;
 }
 
-}  // namespace graphdb::cli
+}  // namespace loredb::cli

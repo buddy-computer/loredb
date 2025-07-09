@@ -7,7 +7,7 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
-namespace graphdb::query {
+namespace loredb::query {
 
 QueryExecutor::QueryExecutor(std::shared_ptr<storage::GraphStore> graph_store,
                              std::shared_ptr<storage::SimpleIndexManager> index_manager)
@@ -31,7 +31,7 @@ util::expected<QueryResult, storage::Error> QueryExecutor::get_node_by_id(storag
         result = graph_store_->get_node(node_id);
     }
     if (!result.has_value()) {
-        return util::unexpected(result.error());
+        return util::unexpected<storage::Error>(result.error());
     }
     
     auto [node, properties] = result.value();
@@ -91,7 +91,7 @@ util::expected<QueryResult, storage::Error> QueryExecutor::get_edge_by_id(storag
         result = graph_store_->get_edge(edge_id);
     }
     if (!result.has_value()) {
-        return util::unexpected(result.error());
+        return util::unexpected<storage::Error>(result.error());
     }
     
     auto [edge, properties] = result.value();
@@ -156,7 +156,7 @@ util::expected<QueryResult, storage::Error> QueryExecutor::get_all_edges(size_t 
 util::expected<QueryResult, storage::Error> QueryExecutor::get_adjacent_nodes(storage::NodeId node_id) {
     auto result = graph_store_->get_adjacent_nodes(node_id);
     if (!result.has_value()) {
-        return util::unexpected(result.error());
+        return util::unexpected<storage::Error>(result.error());
     }
     
     QueryResult query_result({"node_id"});
@@ -171,7 +171,7 @@ util::expected<QueryResult, storage::Error> QueryExecutor::get_adjacent_nodes(st
 util::expected<QueryResult, storage::Error> QueryExecutor::get_outgoing_edges(storage::NodeId node_id) {
     auto result = graph_store_->get_outgoing_edges(node_id);
     if (!result.has_value()) {
-        return util::unexpected(result.error());
+        return util::unexpected<storage::Error>(result.error());
     }
     
     QueryResult query_result({"edge_id"});
@@ -186,7 +186,7 @@ util::expected<QueryResult, storage::Error> QueryExecutor::get_outgoing_edges(st
 util::expected<QueryResult, storage::Error> QueryExecutor::get_incoming_edges(storage::NodeId node_id) {
     auto result = graph_store_->get_incoming_edges(node_id);
     if (!result.has_value()) {
-        return util::unexpected(result.error());
+        return util::unexpected<storage::Error>(result.error());
     }
     
     QueryResult query_result({"edge_id"});
@@ -317,7 +317,7 @@ util::expected<QueryResult, storage::Error> QueryExecutor::get_document_outlinks
 util::expected<QueryResult, storage::Error> QueryExecutor::find_related_documents(storage::NodeId document_id, size_t max_results) {
     auto adjacent_result = graph_store_->get_adjacent_nodes(document_id);
     if (!adjacent_result.has_value()) {
-        return util::unexpected(adjacent_result.error());
+        return util::unexpected<storage::Error>(adjacent_result.error());
     }
     
     QueryResult query_result({"document_id", "relation_type"});
@@ -330,11 +330,11 @@ util::expected<QueryResult, storage::Error> QueryExecutor::find_related_document
     return query_result;
 }
 
-util::expected<QueryResult, storage::Error> QueryExecutor::suggest_links_for_document(storage::NodeId document_id, const std::string& content_snippet) {
+util::expected<QueryResult, storage::Error> QueryExecutor::suggest_links_for_document(storage::NodeId document_id, const std::string& /*content_snippet*/) {
     // Simple link suggestion based on adjacent nodes
     auto related_result = find_related_documents(document_id, 5);
     if (!related_result.has_value()) {
-        return util::unexpected(related_result.error());
+        return util::unexpected<storage::Error>(related_result.error());
     }
     
     QueryResult query_result({"suggested_document_id", "reason"});
@@ -486,4 +486,4 @@ std::vector<std::vector<storage::NodeId>> QueryExecutor::bfs_paths_with_length(s
 // Streaming implementations removed for C++20 compatibility
 // Will be re-implemented when proper coroutine support is available
 
-}  // namespace graphdb::query
+}  // namespace loredb::query

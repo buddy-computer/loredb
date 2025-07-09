@@ -1,6 +1,6 @@
 #include "crc32.h"
 
-namespace graphdb::util {
+namespace loredb::util {
 
 const uint32_t CRC32::CRC_TABLE[256] = {
     0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
@@ -48,6 +48,10 @@ const uint32_t CRC32::CRC_TABLE[256] = {
     0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
+void CRC32::initialize_table() {
+    // This is not needed as the table is pre-computed.
+}
+
 uint32_t CRC32::calculate(std::span<const uint8_t> data) {
     return finalize(update(0xFFFFFFFF, data));
 }
@@ -67,4 +71,4 @@ uint32_t CRC32::finalize(uint32_t crc) {
     return crc ^ 0xFFFFFFFF;
 }
 
-}  // namespace graphdb::util
+}  // namespace loredb::util

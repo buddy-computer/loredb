@@ -9,9 +9,9 @@
 #include <filesystem>
 #include <memory>
 
-using namespace graphdb::query::cypher;
-using namespace graphdb::transaction;
-namespace storage = graphdb::storage;
+using namespace loredb::query::cypher;
+using namespace loredb::transaction;
+namespace storage = loredb::storage;
 
 class CypherParserTest : public ::testing::Test {
 protected:
@@ -30,7 +30,7 @@ protected:
         index_manager_ = std::make_shared<storage::SimpleIndexManager>();
         graph_store_ = std::make_unique<storage::GraphStore>(std::move(page_store), mvcc_manager_);
         
-        executor_ = std::make_unique<CypherExecutor>(graph_store_, index_manager_);
+        executor_ = std::make_unique<CypherExecutor>(graph_store_, index_manager_, mvcc_manager_);
     }
     
     void TearDown() override {
@@ -38,6 +38,7 @@ protected:
         graph_store_.reset();
         index_manager_.reset();
         mvcc_manager_.reset();
+        txn_manager_.reset();
         if (page_store_) {
             page_store_->close();
             page_store_.reset();
@@ -47,6 +48,7 @@ protected:
     
     std::string page_store_path_;
     std::shared_ptr<storage::FilePageStore> page_store_;
+    std::shared_ptr<TransactionManager> txn_manager_;
     std::shared_ptr<MVCCManager> mvcc_manager_;
     std::shared_ptr<storage::SimpleIndexManager> index_manager_;
     std::shared_ptr<storage::GraphStore> graph_store_;
@@ -266,4 +268,191 @@ TEST_F(CypherParserTest, ExecuteComplexEdgePattern) {
     auto& result = query_result.value();
     EXPECT_EQ(result.rows.size(), 1); // Alice -> Bob
     EXPECT_EQ(result.columns.size(), 2); // a.name, b.name
+}
+
+TEST_F(CypherParserTest, ExecuteMultiHopQuery) {
+    // Create a chain: Alice -> Bob -> Charlie
+    std::vector<storage::Property> alice_props = {storage::Property("name", storage::PropertyValue(std::string("Alice")))};
+    std::vector<storage::Property> bob_props = {storage::Property("name", storage::PropertyValue(std::string("Bob")))};
+    std::vector<storage::Property> charlie_props = {storage::Property("name", storage::PropertyValue(std::string("Charlie")))};
+    
+    auto alice_id = graph_store_->create_node(alice_props).value();
+    auto bob_id = graph_store_->create_node(bob_props).value();
+    auto charlie_id = graph_store_->create_node(charlie_props).value();
+    
+    std::vector<storage::Property> knows_props = {storage::Property("type", storage::PropertyValue(std::string("KNOWS")))};
+    
+    graph_store_->create_edge(alice_id, bob_id, "KNOWS", knows_props);
+    graph_store_->create_edge(bob_id, charlie_id, "KNOWS", knows_props);
+
+    // Query for the 2-hop path
+    std::string query = "MATCH (a {name: \"Alice\"})-[r1]->(b)-[r2]->(c) RETURN a.name, b.name, c.name";
+    auto query_result = executor_->execute_query(query);
+
+    ASSERT_TRUE(query_result.has_value()) << "Query failed: " << query_result.error().message;
+
+    auto& result = query_result.value();
+    EXPECT_EQ(result.rows.size(), 1);
+    EXPECT_EQ(result.columns.size(), 3);
+    if (!result.rows.empty()) {
+        EXPECT_EQ(result.rows[0][0], "Alice");
+        EXPECT_EQ(result.rows[0][1], "Bob");
+        EXPECT_EQ(result.rows[0][2], "Charlie");
+    }
+}
+
+TEST_F(CypherParserTest, ExecuteUndirectedQuery) {
+    // Create a directed edge: Alice -> Bob
+    std::vector<storage::Property> alice_props = {storage::Property("name", storage::PropertyValue(std::string("Alice")))};
+    std::vector<storage::Property> bob_props = {storage::Property("name", storage::PropertyValue(std::string("Bob")))};
+    
+    auto alice_id = graph_store_->create_node(alice_props).value();
+    auto bob_id = graph_store_->create_node(bob_props).value();
+    
+    std::vector<storage::Property> knows_props = {storage::Property("type", storage::PropertyValue(std::string("KNOWS")))};
+    graph_store_->create_edge(alice_id, bob_id, "KNOWS", knows_props);
+
+    // Query with an undirected edge, it should find the directed edge
+    std::string query = "MATCH (a {name: \"Alice\"})--(b) RETURN a.name, b.name";
+    auto query_result = executor_->execute_query(query);
+
+    ASSERT_TRUE(query_result.has_value()) << "Query failed: " << query_result.error().message;
+
+    auto& result = query_result.value();
+    EXPECT_EQ(result.rows.size(), 1);
+    if (!result.rows.empty()) {
+        EXPECT_EQ(result.rows[0][0], "Alice");
+        EXPECT_EQ(result.rows[0][1], "Bob");
+    }
+}
+
+TEST_F(CypherParserTest, ExecuteLimitQuery) {
+    // Create some nodes
+    graph_store_->create_node({});
+    graph_store_->create_node({});
+    graph_store_->create_node({});
+
+    // Query with LIMIT
+    std::string query = "MATCH (n) RETURN n LIMIT 2";
+    auto query_result = executor_->execute_query(query);
+
+    ASSERT_TRUE(query_result.has_value()) << "Query failed: " << query_result.error().message;
+
+    auto& result = query_result.value();
+    EXPECT_EQ(result.rows.size(), 2);
+}
+
+TEST_F(CypherParserTest, ExecuteOrderByQuery) {
+    // Create some nodes with names for ordering
+    graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Charlie")))});
+    graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Alice")))});
+    graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Bob")))});
+
+    // Query with ORDER BY
+    std::string query = "MATCH (n) RETURN n.name ORDER BY n.name";
+    auto query_result = executor_->execute_query(query);
+
+    ASSERT_TRUE(query_result.has_value()) << "Query failed: " << query_result.error().message;
+
+    auto& result = query_result.value();
+    EXPECT_EQ(result.rows.size(), 3);
+    if (result.rows.size() == 3) {
+        EXPECT_EQ(result.rows[0][0], "Alice");
+        EXPECT_EQ(result.rows[1][0], "Bob");
+        EXPECT_EQ(result.rows[2][0], "Charlie");
+    }
+}
+
+TEST_F(CypherParserTest, ParseMatchWithLabels) {
+    CypherParser parser;
+    std::string query = "MATCH (n:Person) RETURN n";
+    auto result = parser.parse(query);
+    ASSERT_TRUE(result.has_value());
+    auto& parsed_query = *result.value();
+    ASSERT_TRUE(parsed_query.match.has_value());
+    auto& pattern = parsed_query.match->patterns[0];
+    ASSERT_EQ(pattern.nodes.size(), 1);
+    EXPECT_EQ(pattern.nodes[0].labels.size(), 1);
+    EXPECT_EQ(pattern.nodes[0].labels[0], "Person");
+}
+
+TEST_F(CypherParserTest, ParseMatchWithMultipleLabels) {
+    CypherParser parser;
+    std::string query = "MATCH (n:Person:Admin) RETURN n";
+    auto result = parser.parse(query);
+    ASSERT_TRUE(result.has_value());
+    auto& parsed_query = *result.value();
+    ASSERT_TRUE(parsed_query.match.has_value());
+    auto& pattern = parsed_query.match->patterns[0];
+    ASSERT_EQ(pattern.nodes.size(), 1);
+    EXPECT_EQ(pattern.nodes[0].labels.size(), 2);
+    EXPECT_EQ(pattern.nodes[0].labels[0], "Person");
+    EXPECT_EQ(pattern.nodes[0].labels[1], "Admin");
+}
+
+TEST_F(CypherParserTest, ParseMatchWithEdgeType) {
+    CypherParser parser;
+    std::string query = "MATCH ()-[r:KNOWS]->() RETURN r";
+    auto result = parser.parse(query);
+    ASSERT_TRUE(result.has_value());
+    auto& parsed_query = *result.value();
+    ASSERT_TRUE(parsed_query.match.has_value());
+    auto& pattern = parsed_query.match->patterns[0];
+    ASSERT_EQ(pattern.edges.size(), 1);
+    EXPECT_EQ(pattern.edges[0].types.size(), 1);
+    EXPECT_EQ(pattern.edges[0].types[0], "KNOWS");
+}
+
+TEST_F(CypherParserTest, ParseMatchWithMultipleProperties) {
+    CypherParser parser;
+    std::string query = "MATCH (n {name: \"Alice\", age: 30}) RETURN n";
+    auto result = parser.parse(query);
+    ASSERT_TRUE(result.has_value());
+    auto& parsed_query = *result.value();
+    ASSERT_TRUE(parsed_query.match.has_value());
+    auto& pattern = parsed_query.match->patterns[0];
+    ASSERT_EQ(pattern.nodes.size(), 1);
+    auto& node = pattern.nodes[0];
+    EXPECT_EQ(node.properties.size(), 2);
+    EXPECT_EQ(std::get<std::string>(node.properties["name"]), "Alice");
+    EXPECT_EQ(std::get<int64_t>(node.properties["age"]), 30);
+}
+
+TEST_F(CypherParserTest, ParseErrorHandlingInvalidKeyword) {
+    CypherParser parser;
+    std::string invalid_query = "FETCH (n) RETURN n";
+    auto result = parser.parse(invalid_query);
+    EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(CypherParserTest, ExecuteVariableLengthQuery) {
+    // Create a chain: Alice -> Bob -> Charlie -> David
+    auto alice_id = graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Alice")))}) .value();
+    auto bob_id = graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Bob")))}) .value();
+    auto charlie_id = graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Charlie")))}) .value();
+    auto david_id = graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("David")))}) .value();
+    
+    graph_store_->create_edge(alice_id, bob_id, "KNOWS", {});
+    graph_store_->create_edge(bob_id, charlie_id, "KNOWS", {});
+    graph_store_->create_edge(charlie_id, david_id, "KNOWS", {});
+
+    // Query for paths of length 1 to 3
+    std::string query = "MATCH (a {name: \"Alice\"})-[*1..3]->(b) RETURN b.name";
+    auto query_result = executor_->execute_query(query);
+
+    ASSERT_TRUE(query_result.has_value()) << "Query failed: " << query_result.error().message;
+
+    auto& result = query_result.value();
+    EXPECT_EQ(result.rows.size(), 3);
+
+    std::vector<std::string> names;
+    for(const auto& row : result.rows) {
+        names.push_back(row[0]);
+    }
+    std::sort(names.begin(), names.end());
+    
+    ASSERT_EQ(names.size(), 3);
+    EXPECT_EQ(names[0], "Bob");
+    EXPECT_EQ(names[1], "Charlie");
+    EXPECT_EQ(names[2], "David");
 }

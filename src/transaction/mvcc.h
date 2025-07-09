@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <shared_mutex>
 
-namespace graphdb::transaction {
+namespace loredb::transaction {
 
 using TransactionId = uint64_t;
 using Timestamp = uint64_t;
@@ -52,4 +52,4 @@ private:
     std::unordered_map<TransactionId, TransactionState> completed_transactions_;
 };
 
-}  // namespace graphdb::transaction
+}  // namespace loredb::transaction

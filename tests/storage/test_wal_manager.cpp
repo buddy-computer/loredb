@@ -4,8 +4,8 @@
 #include <unistd.h>
 #include <filesystem>
 
-using namespace graphdb::storage;
-using namespace graphdb::transaction;
+using namespace loredb::storage;
+using namespace loredb::transaction;
 
 class WALManagerTest : public ::testing::Test {
 protected:
@@ -100,7 +100,7 @@ TEST_F(WALManagerTest, Recovery) {
     
     // Test recovery callback
     std::vector<WALRecord> recovered_records;
-    auto recovery_result = wal_manager_->recover_from_log([&](const WALRecord& record) -> graphdb::util::expected<void, Error> {
+    auto recovery_result = wal_manager_->recover_from_log([&](const WALRecord& record) -> loredb::util::expected<void, Error> {
         recovered_records.push_back(record);
         return {};
     });

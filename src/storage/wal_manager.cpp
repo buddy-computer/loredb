@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <cstdio>
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
 size_t WALRecord::get_serialized_size() const {
     size_t base_size = sizeof(LSN) + sizeof(transaction::TransactionId) + 
@@ -500,4 +500,4 @@ util::expected<void, Error> WALManager::log_operation(const OperationLog& op) {
     return {};
 }
 
-} // namespace graphdb::storage
+} // namespace loredb::storage

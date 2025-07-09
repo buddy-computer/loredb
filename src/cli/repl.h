@@ -1,17 +1,28 @@
 /// \file repl.h
 /// \brief Command-line REPL for interactive graph database usage.
-/// \author wiki-graph contributors
+/// \author LoreDB contributors
 /// \ingroup cli
 #pragma once
 
-#include "../storage/file_page_store.h"
-#include "../storage/graph_store.h"
-#include "../storage/simple_index_manager.h"
-#include "../query/executor.h"
+#include "../query/query_types.h"
 #include <memory>
 #include <string>
+#include <vector>
 
-namespace graphdb::cli {
+namespace loredb::storage {
+    class FilePageStore;
+    class GraphStore;
+    class SimpleIndexManager;
+}
+
+namespace loredb::query {
+    class QueryExecutor;
+    namespace cypher {
+        class CypherExecutor;
+    }
+}
+
+namespace loredb::cli {
 
 /**
  * @class REPL
@@ -51,6 +62,7 @@ private:
     void cmd_outlinks(const std::string& args);
     void cmd_related(const std::string& args);
     void cmd_suggest(const std::string& args);
+    void cmd_cypher(const std::string& args);
     void cmd_help(const std::string& args);
     void cmd_exit(const std::string& args);
     
@@ -63,8 +75,9 @@ private:
     std::shared_ptr<storage::GraphStore> graph_store_;
     std::shared_ptr<storage::SimpleIndexManager> index_manager_;
     std::unique_ptr<query::QueryExecutor> query_executor_;
+    std::unique_ptr<query::cypher::CypherExecutor> cypher_executor_;
     
     bool running_;
 };
 
-}  // namespace graphdb::cli
+}  // namespace loredb::cli

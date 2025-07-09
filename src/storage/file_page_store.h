@@ -1,24 +1,24 @@
 /// \file file_page_store.h
-/// \brief File-backed implementation of PageStore for persistent storage.
-/// \author wiki-graph contributors
+/// \brief File-based page store implementation.
+/// \author LoreDB contributors
 /// \ingroup storage
 #pragma once
 
 #include "page_store.h"
 #include <atomic>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 #include <unordered_set>
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
 /**
  * @class FilePageStore
- * @brief File-backed implementation of PageStore using memory-mapped files.
+ * @brief File-backed implementation of PageStore for persistent storage.
  *
- * Manages allocation, deallocation, reading, and writing of fixed-size pages.
  * Supports configuration for initial file size, growth factor, and sync behavior.
  */
 class FilePageStore : public PageStore {
@@ -26,15 +26,17 @@ public:
     // Rule-of-five: non-copyable, movable
     FilePageStore(const FilePageStore&) = delete;
     FilePageStore& operator=(const FilePageStore&) = delete;
-    FilePageStore(FilePageStore&&) noexcept = default;
-    FilePageStore& operator=(FilePageStore&&) noexcept = default;
+    FilePageStore(FilePageStore&&) noexcept = delete;
+    FilePageStore& operator=(FilePageStore&&) noexcept = delete;
+
     /**
-     * @brief Construct a FilePageStore for the given file.
-     * @param filename Path to the backing file.
+     * @brief Construct a FilePageStore with a given file path.
+     * @param path File path for the database.
+     * @param sync_on_write If true, sync after every write operation.
      */
-    explicit FilePageStore(const std::string& filename);
+    explicit FilePageStore(const std::string& path, bool sync_on_write = false);
     /** Destructor. */
-    ~FilePageStore();
+    ~FilePageStore() override;
     
     // PageStore interface
     util::expected<PageId, Error> allocate_page() override;
@@ -46,37 +48,30 @@ public:
     
     size_t get_page_count() const override;
     size_t get_allocated_pages() const override;
-    
+
     // Configuration
-    void set_initial_size(size_t size) { initial_size_ = size; }
-    void set_growth_factor(double factor) { growth_factor_ = factor; }
-    void set_sync_on_write(bool sync) { sync_on_write_ = sync; }
+    void set_initial_size(size_t size);
+    void set_growth_factor(double factor);
+    void set_sync_on_write(bool sync);
 
 private:
-    util::expected<void, Error> ensure_capacity(size_t required_pages);
-    util::expected<void, Error> extend_file(size_t new_size);
-    util::expected<void, Error> remap_file();
-    PageId get_next_page_id();
+    void ensure_file_size(size_t required_size);
     
-    std::string filename_;
-    int fd_;
-    uint8_t* mapped_memory_;
-    size_t file_size_;
-    size_t mapped_size_;
+    std::string file_path_;
+    std::fstream file_stream_;
+    bool sync_on_write_;
+    bool is_closed_;
     
     // Page management
+    std::mutex file_mutex_;
     std::atomic<PageId> next_page_id_;
-    mutable std::mutex free_pages_mutex_;
+    std::atomic<size_t> allocated_pages_;
+    std::unique_ptr<std::vector<uint8_t>> page_buffer_; // for reads
     std::unordered_set<PageId> free_pages_;
     
     // Configuration
     size_t initial_size_;
     double growth_factor_;
-    bool sync_on_write_;
-    
-    // State
-    bool is_open_;
-    std::mutex file_mutex_;
 };
 
-}  // namespace graphdb::storage
+}  // namespace loredb::storage

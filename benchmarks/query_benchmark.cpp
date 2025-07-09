@@ -8,14 +8,14 @@
 #include <vector>
 #include <unistd.h>
 
-using namespace graphdb::storage;
-using namespace graphdb::query;
+using namespace loredb::storage;
+using namespace loredb::query;
 
 class QueryBenchmarkFixture : public benchmark::Fixture {
 public:
     void SetUp(const benchmark::State& state) override {
         // Create temporary file for testing
-        std::string db_path = "/tmp/graphdb_query_benchmark_" + std::to_string(getpid()) + ".db";
+        std::string db_path = "/tmp/loredb_query_benchmark_" + std::to_string(getpid()) + ".db";
         
         auto page_store = std::make_unique<FilePageStore>(db_path);
         graph_store_ = std::make_shared<GraphStore>(std::move(page_store));
@@ -35,7 +35,7 @@ public:
         graph_store_.reset();
         
         // Clean up temporary file
-        std::string db_path = "/tmp/graphdb_query_benchmark_" + std::to_string(getpid()) + ".db";
+        std::string db_path = "/tmp/loredb_query_benchmark_" + std::to_string(getpid()) + ".db";
         unlink(db_path.c_str());
     }
     

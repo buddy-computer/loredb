@@ -1,6 +1,6 @@
 #include "mvcc.h"
 
-namespace graphdb::transaction {
+namespace loredb::transaction {
 
 TransactionManager::TransactionManager() : next_transaction_id_(1), current_timestamp_(1) {
 }
@@ -91,4 +91,4 @@ bool TransactionManager::is_transaction_committed(TransactionId tx_id) const {
     return true;
 }
 
-}  // namespace graphdb::transaction
+}  // namespace loredb::transaction

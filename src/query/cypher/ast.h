@@ -7,7 +7,7 @@
 #include <optional>
 #include <unordered_map>
 
-namespace graphdb::query::cypher {
+namespace loredb::query::cypher {
 
 // Forward declarations
 struct Expression;
@@ -126,6 +126,8 @@ struct Edge {
     std::vector<std::string> types;          // Edge types (e.g., ["KNOWS", "FRIEND"])
     PropertyMap properties;                  // Property constraints
     bool directed = true;                    // Direction (true for ->, false for -)
+    int min_hops = 1;                        // Minimum hops for variable-length paths
+    int max_hops = 1;                        // Maximum hops for variable-length paths
     
     Edge() = default;
     Edge(std::optional<std::string> var, std::vector<std::string> typs, PropertyMap props, bool dir = true)
@@ -262,4 +264,4 @@ struct Query {
     }
 };
 
-} // namespace graphdb::query::cypher
+} // namespace loredb::query::cypher

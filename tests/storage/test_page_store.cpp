@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "../../src/storage/page_store.h"
 
-using namespace graphdb::storage;
+using namespace loredb::storage;
 
 class PageStoreTest : public ::testing::Test {
 protected:

@@ -4,27 +4,22 @@
 #include <string>
 
 int main(int argc, char* argv[]) {
-    std::string db_path = "graphdb.db";
+    loredb::util::Logger::init();
     
-    // Parse command line arguments
+    if (argc > 1 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
+        std::cout << "loredb version 0.1.0" << std::endl;
+        return 0;
+    }
+
+    std::string db_path = "loredb.db";
     if (argc > 1) {
         db_path = argv[1];
     }
     
-    try {
-        // Initialize logger
-        graphdb::util::Logger::init("info", "graphdb-cli.log");
-        LOG_INFO("Starting GraphDB CLI - database: {}", db_path);
-        
-        graphdb::cli::REPL repl(db_path);
-        repl.run();
-        
-        LOG_INFO("GraphDB CLI shutting down");
-    } catch (const std::exception& e) {
-        LOG_ERROR("Fatal error: {}", e.what());
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
-    }
+    LOG_INFO("Starting loredb CLI - database: {}", db_path);
+    
+    loredb::cli::REPL repl(db_path);
+    repl.run();
     
     return 0;
 }

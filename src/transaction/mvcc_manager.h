@@ -1,6 +1,6 @@
 /// \file mvcc_manager.h
 /// \brief Multi-version concurrency control (MVCC) manager for versioned storage.
-/// \author wiki-graph contributors
+/// \author LoreDB contributors
 /// \ingroup transaction
 #pragma once
 
@@ -11,8 +11,9 @@
 #include <variant>
 #include <vector>
 #include <shared_mutex>
+#include "lock_manager.h"
 
-namespace graphdb::transaction {
+namespace loredb::transaction {
 
 // Error codes for MVCC operations
 enum class MVCCErrorCode {
@@ -58,13 +59,19 @@ public:
     // Garbage collect versions that are older than min_active_tx_id (i.e., no TX can see them)
     void garbage_collect(TransactionId min_active_tx_id);
 
+    // Get the lock manager
+    LockManager& get_lock_manager() {
+        return *lock_manager_;
+    }
+
 private:
     // Check if a version is visible to a transaction
     bool is_version_visible(const Version& version, TransactionId tx_id) const;
     
     std::shared_ptr<TransactionManager> txn_manager_;
+    std::unique_ptr<LockManager> lock_manager_;
     mutable std::shared_mutex mutex_;
     std::unordered_map<uint64_t, std::vector<Version>> versions_;
 };
 
-} // namespace graphdb::transaction 
+} // namespace loredb::transaction 

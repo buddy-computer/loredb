@@ -4,7 +4,7 @@
 #include <vector>
 #include <atomic>
 
-using namespace graphdb::storage;
+using namespace loredb::storage;
 
 class IndexManagerTest : public ::testing::Test {
 protected:

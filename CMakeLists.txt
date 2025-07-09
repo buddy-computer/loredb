@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(wiki-graph CXX)
+project(loredb CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -56,12 +56,13 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(benchmark CONFIG REQUIRED)
 find_package(pegtl CONFIG REQUIRED)
+find_package(TBB CONFIG REQUIRED)
 
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Core library
-add_library(graphdb STATIC
+add_library(loredb STATIC
     src/storage/page_store.cpp
     src/storage/file_page_store.cpp
     src/storage/graph_store.cpp
@@ -70,29 +71,34 @@ add_library(graphdb STATIC
     src/query/executor.cpp
     src/query/cypher/parser.cpp
     src/query/cypher/executor.cpp
+    src/query/cypher/expression_evaluator.cpp
+    src/query/planner.cpp
+    src/query/execution_plan.cpp
     src/transaction/mvcc.cpp
     src/transaction/mvcc_manager.cpp
+    src/transaction/lock_manager.cpp
     src/storage/wal_manager.cpp
     src/util/varint.cpp
     src/util/crc32.cpp
     src/util/logger.cpp
 )
 
-target_link_libraries(graphdb 
+target_link_libraries(loredb 
     Threads::Threads
     tl::expected
     fmt::fmt
     spdlog::spdlog
     taocpp::pegtl
+    TBB::tbb
 )
 
 # CLI executable
-add_executable(graphdb-cli
+add_executable(loredb-cli
     src/cli/main.cpp
     src/cli/repl.cpp
 )
 
-target_link_libraries(graphdb-cli graphdb)
+target_link_libraries(loredb-cli loredb)
 
 # Tests
 add_executable(tests
@@ -108,7 +114,7 @@ add_executable(tests
 )
 
 target_link_libraries(tests 
-    graphdb
+    loredb
     GTest::gtest_main
     GTest::gmock_main
 )
@@ -120,7 +126,7 @@ add_executable(benchmarks
 )
 
 target_link_libraries(benchmarks
-    graphdb
+    loredb
     benchmark::benchmark
     benchmark::benchmark_main
 )

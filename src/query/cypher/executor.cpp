@@ -1,13 +1,18 @@
 #include "executor.h"
+#include "expression_evaluator.h"
 #include "../../util/logger.h"
 #include <algorithm>
 #include <sstream>
+#include <queue> // Added for BFS
 
-namespace graphdb::query::cypher {
+namespace loredb::query::cypher {
 
 CypherExecutor::CypherExecutor(std::shared_ptr<storage::GraphStore> graph_store,
-                               std::shared_ptr<storage::SimpleIndexManager> index_manager)
-    : graph_store_(std::move(graph_store)), index_manager_(std::move(index_manager)) {
+                               std::shared_ptr<storage::SimpleIndexManager> index_manager,
+                               std::shared_ptr<transaction::MVCCManager> mvcc_manager)
+    : graph_store_(std::move(graph_store)), 
+      index_manager_(std::move(index_manager)),
+      mvcc_manager_(std::move(mvcc_manager)) {
 }
 
 CypherExecutor::~CypherExecutor() = default;
@@ -15,102 +20,102 @@ CypherExecutor::~CypherExecutor() = default;
 util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const std::string& cypher_query) {
     LOG_INFO("Executing Cypher query: {}", cypher_query);
     
-    // Parse the query
     auto parse_result = parser_.parse(cypher_query);
     if (!parse_result.has_value()) {
-        return util::unexpected(parse_result.error());
+        return util::unexpected<storage::Error>(parse_result.error());
     }
     
     return execute_query(*parse_result.value());
 }
 
 util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const Query& query) {
-    // Start transaction
     auto tx = txn_manager_.begin_transaction();
     ExecutionContext ctx(graph_store_, index_manager_, tx->id);
     
     try {
-        // Handle read queries (MATCH ... RETURN)
         if (query.is_read_query()) {
             ResultSet result_set;
             
-            // Execute MATCH clause
             if (query.match.has_value()) {
                 auto match_result = execute_match(query.match.value(), ctx);
                 if (!match_result.has_value()) {
                     txn_manager_.abort_transaction(tx);
-                    return util::unexpected(match_result.error());
+                    mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                    return util::unexpected<storage::Error>(match_result.error());
                 }
                 result_set = std::move(match_result.value());
             }
             
-            // Apply WHERE clause
             if (query.where.has_value()) {
                 auto where_result = apply_where(query.where.value(), result_set, ctx);
                 if (!where_result.has_value()) {
                     txn_manager_.abort_transaction(tx);
-                    return util::unexpected(where_result.error());
+                    mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                    return util::unexpected<storage::Error>(where_result.error());
                 }
                 result_set = std::move(where_result.value());
             }
             
-            // Execute RETURN clause
             if (query.return_clause.has_value()) {
                 auto return_result = execute_return(query.return_clause.value(), result_set, ctx);
                 if (!return_result.has_value()) {
                     txn_manager_.abort_transaction(tx);
-                    return util::unexpected(return_result.error());
+                    mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                    return util::unexpected<storage::Error>(return_result.error());
                 }
                 
                 auto final_result = return_result.value();
                 
-                // Apply ORDER BY if present
                 if (query.order_by.has_value()) {
                     auto order_result = apply_order_by(final_result, query.order_by.value());
                     if (!order_result.has_value()) {
                         txn_manager_.abort_transaction(tx);
-                        return util::unexpected(order_result.error());
+                        mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                        return util::unexpected<storage::Error>(order_result.error());
                     }
                     final_result = std::move(order_result.value());
                 }
                 
-                // Apply LIMIT if present
                 if (query.limit.has_value()) {
                     auto limit_result = apply_limit(final_result, query.limit.value());
                     if (!limit_result.has_value()) {
                         txn_manager_.abort_transaction(tx);
-                        return util::unexpected(limit_result.error());
+                        mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                        return util::unexpected<storage::Error>(limit_result.error());
                     }
                     final_result = std::move(limit_result.value());
                 }
                 
                 txn_manager_.commit_transaction(tx);
+                mvcc_manager_->get_lock_manager().unlock_all(tx->id);
                 return final_result;
             }
         }
         
-        // Handle write queries (CREATE)
         if (query.create.has_value()) {
             auto create_result = execute_create(query.create.value(), ctx);
             if (!create_result.has_value()) {
                 txn_manager_.abort_transaction(tx);
-                return util::unexpected(create_result.error());
+                mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                return util::unexpected<storage::Error>(create_result.error());
             }
             
             txn_manager_.commit_transaction(tx);
+            mvcc_manager_->get_lock_manager().unlock_all(tx->id);
             return create_result.value();
         }
         
-        // If we get here, the query was not recognized
         txn_manager_.abort_transaction(tx);
-        return util::unexpected(storage::Error{
+        mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+        return util::unexpected<storage::Error>(storage::Error{
             storage::ErrorCode::INVALID_ARGUMENT, 
             "Unsupported query type"
         });
         
     } catch (const std::exception& e) {
         txn_manager_.abort_transaction(tx);
-        return util::unexpected(storage::Error{
+        mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+        return util::unexpected<storage::Error>(storage::Error{
             storage::ErrorCode::INVALID_ARGUMENT, 
             "Query execution error: " + std::string(e.what())
         });
@@ -121,15 +126,13 @@ util::expected<ResultSet, storage::Error> CypherExecutor::execute_match(const Ma
                                                                        ExecutionContext& ctx) {
     ResultSet result_set;
     
-    // For now, handle single pattern matching
     if (match_clause.patterns.empty()) {
-        return result_set; // Empty result
+        return result_set;
     }
     
-    // Start with the first pattern
     auto pattern_result = match_pattern(match_clause.patterns[0], ctx);
     if (!pattern_result.has_value()) {
-        return util::unexpected(pattern_result.error());
+        return util::unexpected<storage::Error>(pattern_result.error());
     }
     
     result_set = std::move(pattern_result.value());
@@ -141,34 +144,128 @@ util::expected<ResultSet, storage::Error> CypherExecutor::execute_match(const Ma
 
 util::expected<ResultSet, storage::Error> CypherExecutor::match_pattern(const Pattern& pattern, 
                                                                        ExecutionContext& ctx) {
-    ResultSet result_set;
-    
     if (pattern.nodes.empty()) {
-        return result_set;
+        return ResultSet{};
     }
-    
-    // Handle simple node patterns
+
+    // Handle simple node patterns, e.g., MATCH (n)
     if (pattern.nodes.size() == 1 && pattern.edges.empty()) {
         return match_node(pattern.nodes[0], ctx);
     }
-    
-    // Handle node-edge-node patterns: (a)-[r]->(b)
-    if (pattern.nodes.size() == 2 && pattern.edges.size() == 1) {
-        return match_node_edge_node_pattern(pattern.nodes[0], pattern.edges[0], pattern.nodes[1], ctx);
+
+    // Handle variable-length paths
+    if (pattern.edges.size() == 1 && (pattern.edges[0].min_hops != 1 || pattern.edges[0].max_hops != 1)) {
+        return match_variable_length_path(pattern.nodes[0], pattern.edges[0], pattern.nodes[1], ctx);
+    }
+
+    // For patterns longer than a simple node match, we'll use an iterative approach.
+    // Start by finding all candidates for the first node in the pattern.
+    auto result_set_or_error = match_node(pattern.nodes[0], ctx);
+    if (!result_set_or_error.has_value()) {
+        return util::unexpected<storage::Error>(result_set_or_error.error());
+    }
+    auto result_set = result_set_or_error.value();
+
+    // Iteratively expand the match for each edge and subsequent node in the pattern.
+    for (size_t i = 0; i < pattern.edges.size(); ++i) {
+        const auto& from_node_pattern = pattern.nodes[i];
+        const auto& edge_pattern = pattern.edges[i];
+        const auto& to_node_pattern = pattern.nodes[i + 1];
+        
+        if (!from_node_pattern.variable.has_value()) {
+            return util::unexpected<storage::Error>(storage::Error{
+                storage::ErrorCode::INVALID_ARGUMENT,
+                "Path expansion requires intermediate nodes to be named."
+            });
+        }
+
+        auto expanded_result = expand_results(result_set, from_node_pattern, edge_pattern, to_node_pattern, ctx);
+        if (!expanded_result.has_value()) {
+            return util::unexpected<storage::Error>(expanded_result.error());
+        }
+        result_set = std::move(expanded_result.value());
+
+        if (result_set.empty()) {
+            break;
+        }
     }
     
-    // TODO: Handle longer path patterns and variable-length paths
-    return util::unexpected(storage::Error{
-        storage::ErrorCode::INVALID_ARGUMENT, 
-        "Complex multi-hop pattern matching not yet implemented"
-    });
+    return result_set;
+}
+
+util::expected<ResultSet, storage::Error> CypherExecutor::match_variable_length_path(const Node& from_node,
+                                                                                     const Edge& edge,
+                                                                                     const Node& to_node,
+                                                                                     ExecutionContext& ctx) {
+    ResultSet result_set;
+
+    auto from_node_ids_result = find_nodes_by_pattern(from_node, ctx);
+    if (!from_node_ids_result.has_value()) {
+        return util::unexpected<storage::Error>(from_node_ids_result.error());
+    }
+
+    int max_hops = (edge.max_hops == -1) ? 10 : edge.max_hops; // Limit search depth for safety
+
+    for (auto start_node_id : from_node_ids_result.value()) {
+        std::queue<std::vector<storage::NodeId>> queue;
+        queue.push({start_node_id});
+
+        while (!queue.empty()) {
+            std::vector<storage::NodeId> current_path = queue.front();
+            queue.pop();
+
+            if (current_path.size() > static_cast<size_t>(max_hops)) {
+                continue;
+            }
+
+            storage::NodeId last_node_id = current_path.back();
+
+            if (current_path.size() >= static_cast<size_t>(edge.min_hops)) {
+                if (matches_node_pattern(to_node, last_node_id, ctx)) {
+                    ResultRow row;
+                    if (from_node.variable.has_value()) {
+                        row.bindings[from_node.variable.value()] = VariableBinding(VariableBinding::Type::NODE, start_node_id);
+                    }
+                    if (to_node.variable.has_value()) {
+                        row.bindings[to_node.variable.value()] = VariableBinding(VariableBinding::Type::NODE, last_node_id);
+                    }
+                    // Note: path variable binding not implemented
+                    result_set.push_back(std::move(row));
+                }
+            }
+
+            // Expand to neighbors
+            if (current_path.size() < static_cast<size_t>(max_hops)) {
+                auto edge_ids_result = find_edges_by_pattern(edge, last_node_id, 0, ctx);
+                if (edge_ids_result.has_value()) {
+                    for (auto edge_id : edge_ids_result.value()) {
+                        auto edge_result = ctx.graph_store->has_mvcc()
+                            ? ctx.graph_store->get_edge(ctx.tx_id, edge_id)
+                            : ctx.graph_store->get_edge(edge_id);
+                        
+                        if (edge_result.has_value()) {
+                            auto neighbor_id = edge_result.value().first.to_node;
+                            // Avoid cycles in the path
+                            if (std::find(current_path.begin(), current_path.end(), neighbor_id) == current_path.end()) {
+                                std::vector<storage::NodeId> new_path = current_path;
+                                new_path.push_back(neighbor_id);
+                                queue.push(new_path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return result_set;
 }
 
 util::expected<ResultSet, storage::Error> CypherExecutor::match_node(const Node& node, 
                                                                     ExecutionContext& ctx) {
     auto node_ids_result = find_nodes_by_pattern(node, ctx);
     if (!node_ids_result.has_value()) {
-        return util::unexpected(node_ids_result.error());
+        return util::unexpected<storage::Error>(node_ids_result.error());
     }
     
     ResultSet result_set;
@@ -190,9 +287,7 @@ util::expected<std::vector<storage::NodeId>, storage::Error> CypherExecutor::fin
                                                                                                    ExecutionContext& ctx) {
     std::vector<storage::NodeId> result;
     
-    // If there are property constraints, use them for filtering
     if (!node.properties.empty()) {
-        // For now, do a simple scan - in a real implementation, we'd use indexes
         for (storage::NodeId node_id = 1; node_id <= 1000; ++node_id) {
             if (ctx.graph_store->has_mvcc()) {
                 auto node_result = ctx.graph_store->get_node(ctx.tx_id, node_id);
@@ -213,16 +308,13 @@ util::expected<std::vector<storage::NodeId>, storage::Error> CypherExecutor::fin
             }
         }
     } else {
-        // No constraints - return all nodes (up to a limit)
         for (storage::NodeId node_id = 1; node_id <= 100; ++node_id) {
             if (ctx.graph_store->has_mvcc()) {
-                auto node_result = ctx.graph_store->get_node(ctx.tx_id, node_id);
-                if (node_result.has_value()) {
+                if (ctx.graph_store->get_node(ctx.tx_id, node_id).has_value()) {
                     result.push_back(node_id);
                 }
             } else {
-                auto node_result = ctx.graph_store->get_node(node_id);
-                if (node_result.has_value()) {
+                if (ctx.graph_store->get_node(node_id).has_value()) {
                     result.push_back(node_id);
                 }
             }
@@ -232,27 +324,92 @@ util::expected<std::vector<storage::NodeId>, storage::Error> CypherExecutor::fin
     return result;
 }
 
+util::expected<ResultSet, storage::Error> CypherExecutor::expand_results(const ResultSet& previous_results,
+                                                                       const Node& from_node_pattern,
+                                                                       const Edge& edge_pattern,
+                                                                       const Node& to_node_pattern,
+                                                                       ExecutionContext& ctx) {
+    ResultSet new_results;
+
+    if (!from_node_pattern.variable.has_value()) {
+        return util::unexpected<storage::Error>(storage::Error{
+            storage::ErrorCode::INVALID_ARGUMENT,
+            "Cannot expand from a node without a variable."
+        });
+    }
+
+    for (const auto& row : previous_results) {
+        auto it = row.bindings.find(from_node_pattern.variable.value());
+        if (it == row.bindings.end() || it->second.type != VariableBinding::Type::NODE) {
+            continue;
+        }
+        
+        storage::NodeId from_id = it->second.id_value;
+
+        auto edge_ids_result = find_edges_by_pattern(edge_pattern, from_id, 0, ctx);
+        if (!edge_ids_result.has_value()) {
+            continue;
+        }
+
+        for (auto edge_id : edge_ids_result.value()) {
+            auto edge_result = ctx.graph_store->has_mvcc()
+                ? ctx.graph_store->get_edge(ctx.tx_id, edge_id)
+                : ctx.graph_store->get_edge(edge_id);
+
+            if (!edge_result.has_value()) {
+                continue;
+            }
+
+            auto& [edge_record, edge_properties] = edge_result.value();
+            storage::NodeId to_id = edge_record.to_node;
+            
+            if (matches_node_pattern(to_node_pattern, to_id, ctx)) {
+                ResultRow new_row = row;
+
+                if (edge_pattern.variable.has_value()) {
+                    new_row.bindings[edge_pattern.variable.value()] = VariableBinding(
+                        VariableBinding::Type::EDGE, edge_id);
+                }
+                if (to_node_pattern.variable.has_value()) {
+                    auto to_var_it = new_row.bindings.find(to_node_pattern.variable.value());
+                    if (to_var_it != new_row.bindings.end()) {
+                        if (to_var_it->second.type == VariableBinding::Type::NODE && to_var_it->second.id_value == to_id) {
+                            // This path is a cycle, which is valid.
+                        } else {
+                            // This variable is already bound to a different node, so this path is not a match.
+                            continue;
+                        }
+                    } else {
+                        new_row.bindings[to_node_pattern.variable.value()] = VariableBinding(
+                            VariableBinding::Type::NODE, to_id);
+                    }
+                }
+                new_results.push_back(std::move(new_row));
+            }
+        }
+    }
+
+    return new_results;
+}
+
 util::expected<ResultSet, storage::Error> CypherExecutor::match_node_edge_node_pattern(const Node& from_node,
                                                                                       const Edge& edge,
                                                                                       const Node& to_node,
                                                                                       ExecutionContext& ctx) {
     ResultSet result_set;
     
-    // Strategy: Find matching source nodes, then find edges from those nodes, then verify target nodes
     auto from_node_ids_result = find_nodes_by_pattern(from_node, ctx);
     if (!from_node_ids_result.has_value()) {
-        return util::unexpected(from_node_ids_result.error());
+        return util::unexpected<storage::Error>(from_node_ids_result.error());
     }
     
     for (auto from_id : from_node_ids_result.value()) {
-        // Find edges from this source node
         auto edge_ids_result = find_edges_by_pattern(edge, from_id, 0, ctx);
         if (!edge_ids_result.has_value()) {
-            continue; // Skip if no matching edges
+            continue;
         }
         
         for (auto edge_id : edge_ids_result.value()) {
-            // Get the edge to find its target node
             auto edge_result = ctx.graph_store->has_mvcc() 
                 ? ctx.graph_store->get_edge(ctx.tx_id, edge_id)
                 : ctx.graph_store->get_edge(edge_id);
@@ -264,11 +421,9 @@ util::expected<ResultSet, storage::Error> CypherExecutor::match_node_edge_node_p
             auto [edge_record, edge_properties] = edge_result.value();
             auto to_id = edge_record.to_node;
             
-            // Verify the target node matches the pattern
             if (matches_node_pattern(to_node, to_id, ctx)) {
                 ResultRow row;
                 
-                // Bind variables
                 if (from_node.variable.has_value()) {
                     row.bindings[from_node.variable.value()] = VariableBinding(
                         VariableBinding::Type::NODE, from_id);
@@ -292,6 +447,7 @@ util::expected<ResultSet, storage::Error> CypherExecutor::match_node_edge_node_p
     return result_set;
 }
 
+
 util::expected<std::vector<storage::EdgeId>, storage::Error> CypherExecutor::find_edges_by_pattern(const Edge& edge,
                                                                                                    storage::NodeId from_node,
                                                                                                    storage::NodeId to_node,
@@ -299,9 +455,17 @@ util::expected<std::vector<storage::EdgeId>, storage::Error> CypherExecutor::fin
     std::vector<storage::EdgeId> result;
     
     // Get outgoing edges from the source node
-    auto edge_ids = ctx.index_manager->get_outgoing_edges(from_node);
+    auto outgoing_edges = ctx.index_manager->get_outgoing_edges(from_node);
+    result.insert(result.end(), outgoing_edges.begin(), outgoing_edges.end());
+
+    // If the edge is undirected, also get incoming edges
+    if (!edge.directed) {
+        auto incoming_edges = ctx.index_manager->get_incoming_edges(from_node);
+        result.insert(result.end(), incoming_edges.begin(), incoming_edges.end());
+    }
     
-    for (auto edge_id : edge_ids) {
+    std::vector<storage::EdgeId> filtered_result;
+    for (auto edge_id : result) {
         // Get edge details
         auto edge_result = ctx.graph_store->has_mvcc()
             ? ctx.graph_store->get_edge(ctx.tx_id, edge_id)
@@ -316,17 +480,16 @@ util::expected<std::vector<storage::EdgeId>, storage::Error> CypherExecutor::fin
         // Check if this edge matches our pattern
         if (matches_edge_pattern(edge, edge_record, edge_properties)) {
             // If to_node is specified (non-zero), check it matches
-            if (to_node == 0 || edge_record.to_node == to_node) {
-                result.push_back(edge_id);
+            if (to_node == 0 || edge_record.to_node == to_node || (!edge.directed && edge_record.from_node == to_node)) {
+                filtered_result.push_back(edge_id);
             }
         }
     }
     
-    return result;
+    return filtered_result;
 }
 
 bool CypherExecutor::matches_node_pattern(const Node& pattern, storage::NodeId node_id, ExecutionContext& ctx) {
-    // Get node properties
     auto node_result = ctx.graph_store->has_mvcc()
         ? ctx.graph_store->get_node(ctx.tx_id, node_id)
         : ctx.graph_store->get_node(node_id);
@@ -337,17 +500,13 @@ bool CypherExecutor::matches_node_pattern(const Node& pattern, storage::NodeId n
     
     auto [node_record, properties] = node_result.value();
     
-    // Check property constraints
     return matches_property_constraints(pattern.properties, properties);
 }
 
 bool CypherExecutor::matches_edge_pattern(const Edge& pattern, 
-                                         const storage::EdgeRecord& edge_record,
+                                         const storage::EdgeRecord& /*edge_record*/,
                                          const std::vector<storage::Property>& edge_properties) {
-    // Check type constraints (if any)
     if (!pattern.types.empty()) {
-        // For now, we don't store edge types in EdgeRecord, so we'll check properties
-        // In a full implementation, edge types would be stored separately
         bool type_matches = false;
         for (const auto& prop : edge_properties) {
             if (prop.key == "type") {
@@ -369,12 +528,11 @@ bool CypherExecutor::matches_edge_pattern(const Edge& pattern,
             }
         }
         
-        if (!pattern.types.empty() && !type_matches) {
+        if (!type_matches) {
             return false;
         }
     }
     
-    // Check property constraints
     return matches_property_constraints(pattern.properties, edge_properties);
 }
 
@@ -386,7 +544,7 @@ util::expected<ResultSet, storage::Error> CypherExecutor::apply_where(const Wher
     for (const auto& row : input) {
         auto condition_result = evaluate_boolean_expression(*where_clause.condition, row.bindings, ctx);
         if (!condition_result.has_value()) {
-            return util::unexpected(condition_result.error());
+            return util::unexpected<storage::Error>(condition_result.error());
         }
         
         if (condition_result.value()) {
@@ -403,24 +561,21 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_return(const
     std::vector<std::string> columns;
     std::vector<std::vector<std::string>> rows;
     
-    // Extract column names
     for (const auto& item : return_clause.items) {
         if (item.alias.has_value()) {
             columns.push_back(item.alias.value());
         } else {
-            // Generate column name from expression
             columns.push_back("column_" + std::to_string(columns.size()));
         }
     }
     
-    // Process each row
     for (const auto& row : input) {
         std::vector<std::string> result_row;
         
         for (const auto& item : return_clause.items) {
             auto value_result = evaluate_expression(*item.expression, row.bindings, ctx);
             if (!value_result.has_value()) {
-                return util::unexpected(value_result.error());
+                return util::unexpected<storage::Error>(value_result.error());
             }
             
             result_row.push_back(property_value_to_string(value_result.value()));
@@ -444,11 +599,10 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_create(const
     size_t created_edges = 0;
     
     for (const auto& pattern : create_clause.patterns) {
-        // Create nodes
         for (const auto& node : pattern.nodes) {
             auto node_result = create_node_from_pattern(node, ctx);
             if (!node_result.has_value()) {
-                return util::unexpected(node_result.error());
+                return util::unexpected<storage::Error>(node_result.error());
             }
             created_nodes++;
         }
@@ -461,197 +615,22 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_create(const
     return result;
 }
 
-util::expected<PropertyValue, storage::Error> CypherExecutor::evaluate_expression(const Expression& expr, 
-                                                                                 const VariableMap& variables, 
-                                                                                 ExecutionContext& ctx) {
-    switch (expr.type()) {
-        case ExpressionType::LITERAL:
-            return std::get<Literal>(expr.content).value;
-            
-        case ExpressionType::IDENTIFIER: {
-            const auto& id = std::get<Identifier>(expr.content);
-            auto it = variables.find(id.name);
-            if (it != variables.end()) {
-                if (it->second.type == VariableBinding::Type::LITERAL) {
-                    return it->second.literal_value;
-                } else {
-                    return PropertyValue(std::to_string(it->second.id_value));
-                }
-            }
-            return util::unexpected(storage::Error{
-                storage::ErrorCode::INVALID_ARGUMENT, 
-                "Undefined variable: " + id.name
-            });
-        }
-        
-        case ExpressionType::PROPERTY_ACCESS: {
-            const auto& prop_access = std::get<PropertyAccess>(expr.content);
-            auto it = variables.find(prop_access.entity);
-            if (it != variables.end() && it->second.type == VariableBinding::Type::NODE) {
-                auto node_id = it->second.id_value;
-                
-                // Get node properties
-                if (ctx.graph_store->has_mvcc()) {
-                    auto node_result = ctx.graph_store->get_node(ctx.tx_id, node_id);
-                    if (node_result.has_value()) {
-                        auto [node_record, properties] = node_result.value();
-                        for (const auto& prop : properties) {
-                            if (prop.key == prop_access.property) {
-                                // Convert storage::PropertyValue to cypher::PropertyValue
-                                return std::visit([](const auto& v) -> PropertyValue {
-                                    using T = std::decay_t<decltype(v)>;
-                                    if constexpr (std::is_same_v<T, std::string>) {
-                                        return v;
-                                    } else if constexpr (std::is_same_v<T, int64_t>) {
-                                        return v;
-                                    } else if constexpr (std::is_same_v<T, double>) {
-                                        return v;
-                                    } else if constexpr (std::is_same_v<T, bool>) {
-                                        return v;
-                                    } else {
-                                        // For vector<uint8_t>, convert to string
-                                        return std::string("binary_data");
-                                    }
-                                }, prop.value);
-                            }
-                        }
-                    }
-                } else {
-                    auto node_result = ctx.graph_store->get_node(node_id);
-                    if (node_result.has_value()) {
-                        auto [node_record, properties] = node_result.value();
-                        for (const auto& prop : properties) {
-                            if (prop.key == prop_access.property) {
-                                // Convert storage::PropertyValue to cypher::PropertyValue
-                                return std::visit([](const auto& v) -> PropertyValue {
-                                    using T = std::decay_t<decltype(v)>;
-                                    if constexpr (std::is_same_v<T, std::string>) {
-                                        return v;
-                                    } else if constexpr (std::is_same_v<T, int64_t>) {
-                                        return v;
-                                    } else if constexpr (std::is_same_v<T, double>) {
-                                        return v;
-                                    } else if constexpr (std::is_same_v<T, bool>) {
-                                        return v;
-                                    } else {
-                                        // For vector<uint8_t>, convert to string
-                                        return std::string("binary_data");
-                                    }
-                                }, prop.value);
-                            }
-                        }
-                    }
-                }
-            }
-            return util::unexpected(storage::Error{
-                storage::ErrorCode::INVALID_ARGUMENT, 
-                "Property not found: " + prop_access.entity + "." + prop_access.property
-            });
-        }
-        
-        default:
-            return util::unexpected(storage::Error{
-                storage::ErrorCode::INVALID_ARGUMENT, 
-                "Expression type not implemented"
-            });
-    }
-}
-
-util::expected<bool, storage::Error> CypherExecutor::evaluate_boolean_expression(const Expression& expr, 
-                                                                                const VariableMap& variables, 
-                                                                                ExecutionContext& ctx) {
-    switch (expr.type()) {
-        case ExpressionType::COMPARISON: {
-            const auto& comp = std::get<Comparison>(expr.content);
-            auto left_result = evaluate_expression(*comp.left, variables, ctx);
-            auto right_result = evaluate_expression(*comp.right, variables, ctx);
-            
-            if (!left_result.has_value() || !right_result.has_value()) {
-                return false;
-            }
-            
-            // Simple comparison (would need proper type handling in production)
-            std::string left_str = property_value_to_string(left_result.value());
-            std::string right_str = property_value_to_string(right_result.value());
-            
-            switch (comp.op) {
-                case ComparisonOperator::EQUAL:
-                    return left_str == right_str;
-                case ComparisonOperator::NOT_EQUAL:
-                    return left_str != right_str;
-                case ComparisonOperator::LESS_THAN:
-                    return left_str < right_str;
-                case ComparisonOperator::LESS_EQUAL:
-                    return left_str <= right_str;
-                case ComparisonOperator::GREATER_THAN:
-                    return left_str > right_str;
-                case ComparisonOperator::GREATER_EQUAL:
-                    return left_str >= right_str;
-            }
-            break;
-        }
-        
-        case ExpressionType::LOGICAL_AND: {
-            const auto& and_expr = std::get<LogicalAnd>(expr.content);
-            auto left_result = evaluate_boolean_expression(*and_expr.left, variables, ctx);
-            auto right_result = evaluate_boolean_expression(*and_expr.right, variables, ctx);
-            
-            if (!left_result.has_value() || !right_result.has_value()) {
-                return false;
-            }
-            
-            return left_result.value() && right_result.value();
-        }
-        
-        case ExpressionType::LOGICAL_OR: {
-            const auto& or_expr = std::get<LogicalOr>(expr.content);
-            auto left_result = evaluate_boolean_expression(*or_expr.left, variables, ctx);
-            auto right_result = evaluate_boolean_expression(*or_expr.right, variables, ctx);
-            
-            if (!left_result.has_value() || !right_result.has_value()) {
-                return false;
-            }
-            
-            return left_result.value() || right_result.value();
-        }
-        
-        default:
-            return util::unexpected(storage::Error{
-                storage::ErrorCode::INVALID_ARGUMENT, 
-                "Boolean expression type not implemented"
-            });
-    }
-    
-    return false;
-}
-
 bool CypherExecutor::matches_property_constraints(const PropertyMap& constraints,
                                                  const std::vector<storage::Property>& node_properties) {
     for (const auto& [key, expected_value] : constraints) {
         bool found = false;
         for (const auto& prop : node_properties) {
             if (prop.key == key) {
-                // Convert storage PropertyValue to cypher PropertyValue for comparison
                 auto converted_value = std::visit([](const auto& v) -> PropertyValue {
                     using T = std::decay_t<decltype(v)>;
-                    if constexpr (std::is_same_v<T, std::string>) {
-                        return v;
-                    } else if constexpr (std::is_same_v<T, int64_t>) {
-                        return v;
-                    } else if constexpr (std::is_same_v<T, double>) {
-                        return v;
-                    } else if constexpr (std::is_same_v<T, bool>) {
-                        return v;
-                    } else {
-                        // For vector<uint8_t>, convert to string
-                        return std::string("binary_data");
-                    }
+                    if constexpr (std::is_same_v<T, std::string>) return v;
+                    else if constexpr (std::is_same_v<T, int64_t>) return v;
+                    else if constexpr (std::is_same_v<T, double>) return v;
+                    else if constexpr (std::is_same_v<T, bool>) return v;
+                    else return std::string("binary_data");
                 }, prop.value);
                 
-                // Simple comparison - in production, need proper type handling
-                std::string prop_str = property_value_to_string(converted_value);
-                std::string expected_str = property_value_to_string(expected_value);
-                if (prop_str == expected_str) {
+                if (property_value_to_string(converted_value) == property_value_to_string(expected_value)) {
                     found = true;
                     break;
                 }
@@ -666,23 +645,15 @@ bool CypherExecutor::matches_property_constraints(const PropertyMap& constraints
 
 util::expected<storage::NodeId, storage::Error> CypherExecutor::create_node_from_pattern(const Node& node,
                                                                                         ExecutionContext& ctx) {
-    // Convert PropertyMap to vector<Property>
     std::vector<storage::Property> properties;
     for (const auto& [key, value] : node.properties) {
-        // Convert cypher PropertyValue to storage PropertyValue
         auto storage_value = std::visit([](const auto& v) -> storage::PropertyValue {
             using T = std::decay_t<decltype(v)>;
-            if constexpr (std::is_same_v<T, std::string>) {
-                return v;
-            } else if constexpr (std::is_same_v<T, int64_t>) {
-                return v;
-            } else if constexpr (std::is_same_v<T, double>) {
-                return v;
-            } else if constexpr (std::is_same_v<T, bool>) {
-                return v;
-            } else {
-                return std::string("unknown");
-            }
+            if constexpr (std::is_same_v<T, std::string>) return v;
+            else if constexpr (std::is_same_v<T, int64_t>) return v;
+            else if constexpr (std::is_same_v<T, double>) return v;
+            else if constexpr (std::is_same_v<T, bool>) return v;
+            else return std::string("unknown");
         }, value);
         properties.emplace_back(key, storage_value);
     }
@@ -692,33 +663,6 @@ util::expected<storage::NodeId, storage::Error> CypherExecutor::create_node_from
     } else {
         return ctx.graph_store->create_node(properties);
     }
-}
-
-std::string CypherExecutor::property_value_to_string(const PropertyValue& value) {
-    return std::visit([](const auto& v) -> std::string {
-        if constexpr (std::is_same_v<std::decay_t<decltype(v)>, std::string>) {
-            return v;
-        } else if constexpr (std::is_same_v<std::decay_t<decltype(v)>, int64_t>) {
-            return std::to_string(v);
-        } else if constexpr (std::is_same_v<std::decay_t<decltype(v)>, double>) {
-            return std::to_string(v);
-        } else if constexpr (std::is_same_v<std::decay_t<decltype(v)>, bool>) {
-            return v ? "true" : "false";
-        } else {
-            return "unknown";
-        }
-    }, value);
-}
-
-std::string CypherExecutor::variable_binding_to_string(const VariableBinding& binding) {
-    switch (binding.type) {
-        case VariableBinding::Type::NODE:
-        case VariableBinding::Type::EDGE:
-            return std::to_string(binding.id_value);
-        case VariableBinding::Type::LITERAL:
-            return property_value_to_string(binding.literal_value);
-    }
-    return "unknown";
 }
 
 util::expected<QueryResult, storage::Error> CypherExecutor::apply_limit(const QueryResult& result, 
@@ -731,10 +675,9 @@ util::expected<QueryResult, storage::Error> CypherExecutor::apply_limit(const Qu
 }
 
 util::expected<QueryResult, storage::Error> CypherExecutor::apply_order_by(const QueryResult& result, 
-                                                                          const OrderByClause& order_by) {
-    // For now, just return the result unchanged
+                                                                          const OrderByClause& /*order_by*/) {
     // TODO: Implement proper ordering
     return result;
 }
 
-} // namespace graphdb::query::cypher
+} 

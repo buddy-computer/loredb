@@ -1,10 +1,10 @@
 #include "mvcc_manager.h"
 #include <algorithm>
 
-namespace graphdb::transaction {
+namespace loredb::transaction {
 
 MVCCManager::MVCCManager(std::shared_ptr<TransactionManager> txn_manager) 
-    : txn_manager_(std::move(txn_manager)) {
+    : txn_manager_(std::move(txn_manager)), lock_manager_(std::make_unique<LockManager>()) {
 }
 
 util::expected<Version, MVCCError> MVCCManager::read_version(uint64_t key, TransactionId tx_id) const {
@@ -26,6 +26,10 @@ util::expected<Version, MVCCError> MVCCManager::read_version(uint64_t key, Trans
 }
 
 util::expected<void, MVCCError> MVCCManager::write_version(uint64_t key, Version version) {
+    if (!lock_manager_->lock(version.created_tx_id, key, LockMode::EXCLUSIVE)) {
+        return util::unexpected(MVCCError{MVCCErrorCode::CONFLICT, "Deadlock detected"});
+    }
+
     std::unique_lock<std::shared_mutex> lock(mutex_);
     auto & vec = versions_[key];
     // Check the latest version for conflicts (write-write)
@@ -95,4 +99,4 @@ bool MVCCManager::is_version_visible(const Version& version, TransactionId tx_id
     return true;
 }
 
-} // namespace graphdb::transaction 
+} // namespace loredb::transaction 

@@ -5,14 +5,14 @@
 #include "../../src/storage/simple_index_manager.h"
 #include <unistd.h>
 
-using namespace graphdb::query;
-using namespace graphdb::storage;
+using namespace loredb::query;
+using namespace loredb::storage;
 
 class QueryExecutorTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Create temporary file for testing
-        db_filename_ = "/tmp/test_query_graphdb_" + std::to_string(getpid()) + ".db";
+        db_filename_ = "/tmp/test_query_loredb_" + std::to_string(getpid()) + ".db";
         
         auto page_store = std::make_unique<FilePageStore>(db_filename_);
         graph_store_ = std::make_shared<GraphStore>(std::move(page_store));

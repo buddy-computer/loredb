@@ -1,48 +1,66 @@
 #include "simple_index_manager.h"
 #include <algorithm>
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
 void SimpleIndexManager::index_node_property(NodeId node_id, const std::string& key, const std::string& value) {
-    std::unique_lock<std::shared_mutex> lock(node_property_mutex_);
     PropertyKey prop_key{key, value};
-    node_property_index_[prop_key].push_back(node_id);
+    tbb::concurrent_hash_map<PropertyKey, tbb::concurrent_vector<NodeId>, PropertyKeyHash>::accessor accessor;
+    node_property_index_.insert(accessor, prop_key);
+    accessor->second.push_back(node_id);
 }
 
-void SimpleIndexManager::remove_node_property_index(NodeId node_id, const std::string& key) {
-    std::unique_lock<std::shared_mutex> lock(node_property_mutex_);
-    // For simplicity, we don't implement full removal here
-    // In a production system, you'd iterate through all values for the key
+void SimpleIndexManager::remove_node_property_index(NodeId node_id, const std::string& key, const std::string& value) {
+    PropertyKey prop_key{key, value};
+    tbb::concurrent_hash_map<PropertyKey, tbb::concurrent_vector<NodeId>, PropertyKeyHash>::accessor accessor;
+    if (node_property_index_.find(accessor, prop_key)) {
+        auto& vec = accessor->second;
+        tbb::concurrent_vector<NodeId> new_vec;
+        for (const auto& id : vec) {
+            if (id != node_id) {
+                new_vec.push_back(id);
+            }
+        }
+        vec = new_vec;
+    }
 }
 
 std::vector<NodeId> SimpleIndexManager::find_nodes_by_property(const std::string& key, const std::string& value) const {
-    std::shared_lock<std::shared_mutex> lock(node_property_mutex_);
     PropertyKey prop_key{key, value};
-    auto it = node_property_index_.find(prop_key);
-    if (it != node_property_index_.end()) {
-        return it->second;
+    tbb::concurrent_hash_map<PropertyKey, tbb::concurrent_vector<NodeId>, PropertyKeyHash>::const_accessor accessor;
+    if (node_property_index_.find(accessor, prop_key)) {
+        return std::vector<NodeId>(accessor->second.begin(), accessor->second.end());
     }
     return {};
 }
 
 void SimpleIndexManager::index_edge_property(EdgeId edge_id, const std::string& key, const std::string& value) {
-    std::unique_lock<std::shared_mutex> lock(edge_property_mutex_);
     PropertyKey prop_key{key, value};
-    edge_property_index_[prop_key].push_back(edge_id);
+    tbb::concurrent_hash_map<PropertyKey, tbb::concurrent_vector<EdgeId>, PropertyKeyHash>::accessor accessor;
+    edge_property_index_.insert(accessor, prop_key);
+    accessor->second.push_back(edge_id);
 }
 
-void SimpleIndexManager::remove_edge_property_index(EdgeId edge_id, const std::string& key) {
-    std::unique_lock<std::shared_mutex> lock(edge_property_mutex_);
-    // For simplicity, we don't implement full removal here
-    // In a production system, you'd iterate through all values for the key
+void SimpleIndexManager::remove_edge_property_index(EdgeId edge_id, const std::string& key, const std::string& value) {
+    PropertyKey prop_key{key, value};
+    tbb::concurrent_hash_map<PropertyKey, tbb::concurrent_vector<EdgeId>, PropertyKeyHash>::accessor accessor;
+    if (edge_property_index_.find(accessor, prop_key)) {
+        auto& vec = accessor->second;
+        tbb::concurrent_vector<EdgeId> new_vec;
+        for (const auto& id : vec) {
+            if (id != edge_id) {
+                new_vec.push_back(id);
+            }
+        }
+        vec = new_vec;
+    }
 }
 
 std::vector<EdgeId> SimpleIndexManager::find_edges_by_property(const std::string& key, const std::string& value) const {
-    std::shared_lock<std::shared_mutex> lock(edge_property_mutex_);
     PropertyKey prop_key{key, value};
-    auto it = edge_property_index_.find(prop_key);
-    if (it != edge_property_index_.end()) {
-        return it->second;
+    tbb::concurrent_hash_map<PropertyKey, tbb::concurrent_vector<EdgeId>, PropertyKeyHash>::const_accessor accessor;
+    if (edge_property_index_.find(accessor, prop_key)) {
+        return std::vector<EdgeId>(accessor->second.begin(), accessor->second.end());
     }
     return {};
 }
@@ -113,12 +131,10 @@ std::vector<NodeId> SimpleIndexManager::get_adjacent_nodes(NodeId node_id) const
 }
 
 size_t SimpleIndexManager::get_node_property_index_size() const {
-    std::shared_lock<std::shared_mutex> lock(node_property_mutex_);
     return node_property_index_.size();
 }
 
 size_t SimpleIndexManager::get_edge_property_index_size() const {
-    std::shared_lock<std::shared_mutex> lock(edge_property_mutex_);
     return edge_property_index_.size();
 }
 
@@ -128,14 +144,12 @@ size_t SimpleIndexManager::get_adjacency_list_count() const {
 }
 
 void SimpleIndexManager::clear_all_indexes() {
-    std::unique_lock<std::shared_mutex> node_lock(node_property_mutex_);
-    std::unique_lock<std::shared_mutex> edge_lock(edge_property_mutex_);
-    std::unique_lock<std::shared_mutex> adj_lock(adjacency_mutex_);
-    
     node_property_index_.clear();
     edge_property_index_.clear();
+
+    std::unique_lock<std::shared_mutex> adj_lock(adjacency_mutex_);
     outgoing_adjacency_.clear();
     incoming_adjacency_.clear();
 }
 
-}  // namespace graphdb::storage
+}  // namespace loredb::storage

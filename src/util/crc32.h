@@ -1,13 +1,13 @@
 /// \file crc32.h
-/// \brief CRC32 checksum calculation utilities.
-/// \author wiki-graph contributors
+/// \brief CRC32 checksum calculation for data integrity.
+/// \author LoreDB contributors
 /// \ingroup util
 #pragma once
 
 #include <cstdint>
 #include <span>
 
-namespace graphdb::util {
+namespace loredb::util {
 
 /**
  * @class CRC32
@@ -43,10 +43,10 @@ public:
      * @return Final CRC32 checksum.
      */
     static uint32_t finalize(uint32_t crc);
-    
+
 private:
     static const uint32_t CRC_TABLE[256];
     static void initialize_table();
 };
 
-}  // namespace graphdb::util
+}  // namespace loredb::util

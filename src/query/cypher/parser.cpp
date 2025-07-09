@@ -2,7 +2,11 @@
 #include <algorithm>
 #include <cctype>
 
-namespace graphdb::query::cypher {
+namespace loredb::query::cypher {
+
+// This is a simplified parser implementation.
+// In a production system, you'd have more robust error handling
+// and a more complete implementation of the Cypher grammar.
 
 std::string extract_string(const tao::pegtl::parse_tree::node& node) {
     return node.string();
@@ -55,4 +59,4 @@ OrderDirection extract_order_direction(const std::string& dir) {
     return OrderDirection::ASC;
 }
 
-} // namespace graphdb::query::cypher
+} // namespace loredb::query::cypher

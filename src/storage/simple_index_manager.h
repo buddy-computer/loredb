@@ -1,14 +1,15 @@
 #pragma once
 
 #include "page_store.h"
-#include <unordered_map>
 #include <vector>
 #include <mutex>
 #include <shared_mutex>
+#include <tbb/concurrent_hash_map.h>
+#include <tbb/concurrent_vector.h>
 
-namespace graphdb::storage {
+namespace loredb::storage {
 
-// Simplified index manager using regular mutexes
+// Simplified index manager using lock-free structures for property indexing
 class SimpleIndexManager {
 public:
     SimpleIndexManager() = default;
@@ -16,12 +17,12 @@ public:
     
     // Node property indexing
     void index_node_property(NodeId node_id, const std::string& key, const std::string& value);
-    void remove_node_property_index(NodeId node_id, const std::string& key);
+    void remove_node_property_index(NodeId node_id, const std::string& key, const std::string& value);
     std::vector<NodeId> find_nodes_by_property(const std::string& key, const std::string& value) const;
     
     // Edge property indexing
     void index_edge_property(EdgeId edge_id, const std::string& key, const std::string& value);
-    void remove_edge_property_index(EdgeId edge_id, const std::string& key);
+    void remove_edge_property_index(EdgeId edge_id, const std::string& key, const std::string& value);
     std::vector<EdgeId> find_edges_by_property(const std::string& key, const std::string& value) const;
     
     // Adjacency list management
@@ -50,25 +51,26 @@ private:
     };
     
     struct PropertyKeyHash {
-        size_t operator()(const PropertyKey& pk) const {
+        static size_t hash(const PropertyKey& pk) {
             return std::hash<std::string>{}(pk.key) ^ (std::hash<std::string>{}(pk.value) << 1);
+        }
+        
+        static bool equal(const PropertyKey& a, const PropertyKey& b) {
+            return a.key == b.key && a.value == b.value;
         }
     };
     
     // Node property indexes
-    mutable std::shared_mutex node_property_mutex_;
-    std::unordered_map<PropertyKey, std::vector<NodeId>, PropertyKeyHash> node_property_index_;
+    tbb::concurrent_hash_map<PropertyKey, tbb::concurrent_vector<NodeId>, PropertyKeyHash> node_property_index_;
     
     // Edge property indexes
-    mutable std::shared_mutex edge_property_mutex_;
-    std::unordered_map<PropertyKey, std::vector<EdgeId>, PropertyKeyHash> edge_property_index_;
+    tbb::concurrent_hash_map<PropertyKey, tbb::concurrent_vector<EdgeId>, PropertyKeyHash> edge_property_index_;
     
-    // Adjacency lists
+    // Adjacency lists (still using mutexes for now)
     mutable std::shared_mutex adjacency_mutex_;
     std::unordered_map<NodeId, std::vector<EdgeId>> outgoing_adjacency_;
     std::unordered_map<NodeId, std::vector<EdgeId>> incoming_adjacency_;
-    // Map each edge to its (from, to) endpoints for quick adjacency lookups
     std::unordered_map<EdgeId, std::pair<NodeId, NodeId>> edge_endpoints_;
 };
 
-}  // namespace graphdb::storage
+}

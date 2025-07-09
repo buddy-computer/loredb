@@ -1,18 +1,14 @@
 /// \file logger.h
-/// \brief Logging utilities and macros for the graph database.
-/// \author wiki-graph contributors
+/// \brief Logging utilities based on spdlog.
+/// \author LoreDB contributors
 /// \ingroup util
 #pragma once
 
 #include <spdlog/spdlog.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/sinks/rotating_file_sink.h>
-#include <fmt/format.h>
 #include <memory>
 #include <string>
 
-namespace graphdb::util {
+namespace loredb::util {
 
 /**
  * @class Logger
@@ -24,11 +20,10 @@ class Logger {
 public:
     /**
      * @brief Initialize the logger with console and file outputs.
-     * @param log_level Log level (e.g., "info", "debug").
      * @param log_file Log file path.
      */
-    static void init(const std::string& log_level = "info", 
-                     const std::string& log_file = "graphdb.log");
+    static void init(const std::string& log_file = "loredb-cli.log");
+
     /**
      * @brief Get the main logger instance.
      * @return Shared pointer to spdlog logger.
@@ -112,20 +107,20 @@ private:
 };
 
 // Convenience macros for common logging patterns
-#define LOG_TRACE(...) graphdb::util::Logger::trace(__VA_ARGS__)
-#define LOG_DEBUG(...) graphdb::util::Logger::debug(__VA_ARGS__)
-#define LOG_INFO(...) graphdb::util::Logger::info(__VA_ARGS__)
-#define LOG_WARN(...) graphdb::util::Logger::warn(__VA_ARGS__)
-#define LOG_ERROR(...) graphdb::util::Logger::error(__VA_ARGS__)
-#define LOG_CRITICAL(...) graphdb::util::Logger::critical(__VA_ARGS__)
+#define LOG_TRACE(...) loredb::util::Logger::trace(__VA_ARGS__)
+#define LOG_DEBUG(...) loredb::util::Logger::debug(__VA_ARGS__)
+#define LOG_INFO(...) loredb::util::Logger::info(__VA_ARGS__)
+#define LOG_WARN(...) loredb::util::Logger::warn(__VA_ARGS__)
+#define LOG_ERROR(...) loredb::util::Logger::error(__VA_ARGS__)
+#define LOG_CRITICAL(...) loredb::util::Logger::critical(__VA_ARGS__)
 
 #define LOG_OPERATION(component, operation, ...) \
-    graphdb::util::Logger::log_operation(operation, component, __VA_ARGS__)
+    loredb::util::Logger::log_operation(operation, component, __VA_ARGS__)
 
 #define LOG_PERFORMANCE(operation, duration_ms, ...) \
-    graphdb::util::Logger::log_performance(operation, duration_ms, __VA_ARGS__)
+    loredb::util::Logger::log_performance(operation, duration_ms, __VA_ARGS__)
 
 #define LOG_ERROR_DETAILED(component, error_type, ...) \
-    graphdb::util::Logger::log_error(component, error_type, __VA_ARGS__)
+    loredb::util::Logger::log_error(component, error_type, __VA_ARGS__)
 
-}  // namespace graphdb::util
+}

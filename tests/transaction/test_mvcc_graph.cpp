@@ -5,12 +5,12 @@
 #include "../../src/transaction/mvcc.h"
 #include <unistd.h>
 
-using namespace graphdb;
+using namespace loredb;
 
 class GraphMVCCIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        db_file_ = "/tmp/test_graphdb_mvcc_" + std::to_string(getpid()) + ".db";
+        db_file_ = "/tmp/test_loredb_mvcc_" + std::to_string(getpid()) + ".db";
         auto page_store = std::make_unique<storage::FilePageStore>(db_file_);
         txn_mgr_ = std::make_shared<transaction::TransactionManager>();
         mvcc_mgr_ = std::make_shared<transaction::MVCCManager>(txn_mgr_);
