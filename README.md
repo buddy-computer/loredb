@@ -1,4 +1,4 @@
-# Wiki Graph Database
+# LoreDB
 
 A modern, embeddable property graph database engine written in C++20, designed for high performance, extensibility, and robust concurrency.
 
