@@ -1,5 +1,6 @@
 #include "mvcc_manager.h"
 #include <algorithm>
+#include <functional>
 
 namespace loredb::transaction {
 
@@ -29,6 +30,15 @@ util::expected<void, MVCCError> MVCCManager::write_version(uint64_t key, Version
     if (!lock_manager_->lock(version.created_tx_id, key, LockMode::EXCLUSIVE)) {
         return util::unexpected(MVCCError{MVCCErrorCode::CONFLICT, "Deadlock detected"});
     }
+
+    // Simple scope guard to ensure lock is released
+    struct ScopeGuard {
+        std::function<void()> f;
+        ~ScopeGuard() { f(); }
+    };
+    ScopeGuard guard{[this, tx_id = version.created_tx_id, key]() {
+        lock_manager_->unlock(tx_id, key);
+    }};
 
     std::unique_lock<std::shared_mutex> lock(mutex_);
     auto & vec = versions_[key];
