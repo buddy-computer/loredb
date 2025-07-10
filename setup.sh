@@ -5,7 +5,7 @@
 # Works on Ubuntu/Debian, macOS, and other Unix-like systems
 
 set -e  # Exit on any error
-
+set -o pipefail  # Fail if any command in a pipeline fails
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
