@@ -106,7 +106,9 @@ util::expected<void, Error> GraphStore::delete_node(transaction::TransactionId t
             return util::unexpected(Error{ErrorCode::CORRUPTION, "Failed to write tombstone version"});
         }
     } else {
-        // If no MVCC manager, fall back to legacy delete
+        // If no MVCC manager, fall back to legacy delete which physically removes
+        // the node immediately from storage, unlike the MVCC approach above that
+        // creates a tombstone record for versioned visibility
         auto res = delete_node(node_id);
         if (!res.has_value()) return res;
     }

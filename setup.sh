@@ -36,23 +36,60 @@ BUILD_TYPE="${BUILD_TYPE:-Release}"
 VCPKG_ROOT="${VCPKG_ROOT:-$HOME/vcpkg}"
 BUILD_DIR="build"
 SKIP_TESTS="${SKIP_TESTS:-false}"
+CLEAN_BUILD="${CLEAN_BUILD:-false}"
 PARALLEL_JOBS="${PARALLEL_JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 
-# Detect OS
+# Detect OS using portable methods
 detect_os() {
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        if command -v apt-get &> /dev/null; then
-            OS="ubuntu"
-        elif command -v yum &> /dev/null; then
-            OS="centos"
-        else
-            OS="linux"
-        fi
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        OS="macos"
-    else
-        OS="unknown"
-    fi
+    local uname_s=$(uname -s)
+    
+    case "$uname_s" in
+        Linux*)
+            # Try to detect Linux distribution from /etc/os-release (systemd standard)
+            if [[ -f /etc/os-release ]]; then
+                local distro_id=$(grep '^ID=' /etc/os-release 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+                case "$distro_id" in
+                    ubuntu|debian)
+                        OS="ubuntu"
+                        ;;
+                    centos|rhel|fedora|rocky|almalinux)
+                        OS="centos"
+                        ;;
+                    *)
+                        # For other distributions, try fallback detection
+                        if command -v apt-get &> /dev/null; then
+                            OS="ubuntu"
+                        elif command -v yum &> /dev/null || command -v dnf &> /dev/null; then
+                            OS="centos"
+                        else
+                            OS="linux"
+                        fi
+                        ;;
+                esac
+            else
+                # Fallback to command detection for older systems
+                if command -v apt-get &> /dev/null; then
+                    OS="ubuntu"
+                elif command -v yum &> /dev/null || command -v dnf &> /dev/null; then
+                    OS="centos"
+                else
+                    OS="linux"
+                fi
+            fi
+            ;;
+        Darwin*)
+            OS="macos"
+            ;;
+        CYGWIN*|MINGW*|MSYS*)
+            OS="windows"
+            ;;
+        FreeBSD*)
+            OS="freebsd"
+            ;;
+        *)
+            OS="unknown"
+            ;;
+    esac
 }
 
 # Check if command exists
@@ -80,8 +117,21 @@ install_system_deps() {
                 ninja-build
             ;;
         centos)
-            sudo yum groupinstall -y "Development Tools"
-            sudo yum install -y \
+            # Use dnf if available (modern RHEL/CentOS/Fedora), otherwise fall back to yum
+            if command_exists dnf; then
+                PACKAGE_MANAGER="dnf"
+            elif command_exists yum; then
+                PACKAGE_MANAGER="yum"
+            else
+                log_error "Neither dnf nor yum package manager found"
+                exit 1
+            fi
+            
+            sudo $PACKAGE_MANAGER groupinstall -y "Development Tools" || \
+            sudo $PACKAGE_MANAGER group install -y "Development Tools" || \
+            sudo $PACKAGE_MANAGER install -y gcc gcc-c++ make
+            
+            sudo $PACKAGE_MANAGER install -y \
                 cmake \
                 pkgconfig \
                 git \
@@ -98,14 +148,35 @@ install_system_deps() {
                 log_error "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
                 exit 1
             fi
-            brew install cmake git curl zip unzip tar readline ninja
+            # Note: tar, zip, unzip, curl are built into macOS
+            brew install cmake git readline ninja
+            ;;
+        freebsd)
+            # FreeBSD package management
+            if command_exists pkg; then
+                sudo pkg install -y cmake git curl zip unzip tar readline ninja
+            else
+                log_error "FreeBSD pkg command not found"
+                exit 1
+            fi
+            ;;
+        windows)
+            log_warning "Windows detected. Please use one of the following approaches:"
+            log_warning "  1. WSL (Windows Subsystem for Linux) - recommended"
+            log_warning "  2. Visual Studio with vcpkg"
+            log_warning "  3. MSYS2/MinGW-w64"
+            log_warning "Manual dependencies needed:"
+            log_warning "  - CMake 3.20+"
+            log_warning "  - C++20 compiler (MSVC 2019+, GCC 11+, Clang 14+)"
+            log_warning "  - Git, vcpkg"
             ;;
         *)
-            log_warning "Unknown OS. Please install dependencies manually:"
+            log_warning "Unknown OS ($OS). Please install dependencies manually:"
             log_warning "  - CMake 3.20+"
             log_warning "  - C++20 compiler (GCC 11+, Clang 14+)"
             log_warning "  - Git, curl, zip, unzip, tar"
             log_warning "  - readline (optional)"
+            log_warning "  - ninja-build (optional, for faster builds)"
             ;;
     esac
 }
@@ -125,12 +196,32 @@ check_compiler() {
     fi
     
     if command_exists clang++; then
-        CLANG_VERSION=$(clang++ --version | grep -o 'clang version [0-9]\+' | cut -d' ' -f3)
-        if [[ $CLANG_VERSION -ge 14 ]]; then
-            log_success "Clang $CLANG_VERSION found (C++20 compatible)"
-            return 0
+        # Try to get version using robust methods
+        # First try -dumpfullversion (Clang 16+), then fall back to -dumpversion
+        CLANG_FULL_VERSION=""
+        if CLANG_FULL_VERSION=$(clang++ -dumpfullversion 2>/dev/null); then
+            # -dumpfullversion worked (Clang 16+)
+            :
+        elif CLANG_FULL_VERSION=$(clang++ -dumpversion 2>/dev/null); then
+            # -dumpversion worked (older Clang)
+            :
         else
-            log_warning "Clang $CLANG_VERSION found, but Clang 14+ required for C++20"
+            # Both failed, skip this compiler
+            log_warning "Could not determine Clang version"
+            CLANG_FULL_VERSION=""
+        fi
+        
+        if [[ -n "$CLANG_FULL_VERSION" ]]; then
+            # Extract major version by taking everything before the first dot
+            CLANG_MAJOR_VERSION=$(echo "$CLANG_FULL_VERSION" | cut -d. -f1)
+            
+            # Handle case where version might be empty or non-numeric
+            if [[ "$CLANG_MAJOR_VERSION" =~ ^[0-9]+$ ]] && [[ $CLANG_MAJOR_VERSION -ge 14 ]]; then
+                log_success "Clang $CLANG_FULL_VERSION (major: $CLANG_MAJOR_VERSION) found (C++20 compatible)"
+                return 0
+            else
+                log_warning "Clang $CLANG_FULL_VERSION (major: $CLANG_MAJOR_VERSION) found, but Clang 14+ required for C++20"
+            fi
         fi
     fi
     
@@ -191,8 +282,9 @@ setup_vcpkg() {
 configure_cmake() {
     log_info "Configuring CMake build..."
     
-    # Remove build directory only when explicitly requested
+    # Remove old build directory only when explicitly requested
     if [[ "$CLEAN_BUILD" == "true" && -d "$BUILD_DIR" ]]; then
+        log_info "Cleaning existing build directory..."
         rm -rf "$BUILD_DIR"
     fi
 
@@ -283,6 +375,7 @@ Environment Variables:
     BUILD_TYPE          Build configuration (Debug/Release/RelWithDebInfo)
     VCPKG_ROOT          Path to vcpkg installation
     SKIP_TESTS          Set to 'true' to skip tests
+    CLEAN_BUILD         Set to 'true' to clean build directory before building
     PARALLEL_JOBS       Number of build jobs
 
 Examples:
@@ -343,6 +436,7 @@ main() {
     log_info "Build type: $BUILD_TYPE"
     log_info "Parallel jobs: $PARALLEL_JOBS"
     log_info "vcpkg root: $VCPKG_ROOT"
+    log_info "Clean build: $CLEAN_BUILD"
     echo ""
     
     # Detect OS and check requirements
