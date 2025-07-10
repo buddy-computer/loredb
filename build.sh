@@ -37,7 +37,7 @@ pushd "$BUILD_DIR"
 trap 'popd' EXIT
 cmake .. \
   -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake \
-  -DAPPLE_CPU="$CPU" \
+  $( [[ "$OSTYPE" == darwin* ]] && echo "-DAPPLE_CPU=$CPU" ) \
   -DUSE_PGO="$PGO" \
   -DCMAKE_BUILD_TYPE="$CONFIG" \
   -DENABLE_WERROR=OFF

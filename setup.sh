@@ -352,7 +352,6 @@ run_tests() {
         log_success "All tests passed"
     else
         log_error "Some tests failed"
-        cd - > /dev/null
         return 1
     fi
     

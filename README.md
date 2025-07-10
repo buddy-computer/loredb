@@ -590,7 +590,7 @@ valgrind --leak-check=full ./build/tests
 
 #### Commit Message Format
 
-```
+```text
 type(scope): description
 
 - feat: new feature
