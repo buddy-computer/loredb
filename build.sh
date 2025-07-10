@@ -30,7 +30,7 @@ cmake .. \
   -DCMAKE_BUILD_TYPE="$CONFIG" \
   -DENABLE_WERROR=OFF
 
-cmake --build . -- -j$(sysctl -n hw.logicalcpu)
+cmake --build . -- -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
 
 popd
 echo "Build complete in ./$BUILD_DIR/"

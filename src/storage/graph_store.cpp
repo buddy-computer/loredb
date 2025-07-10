@@ -4,6 +4,7 @@
 #include <sstream>
 #include <chrono>
 #include <algorithm>
+#include <cstring>
 
 namespace loredb::storage {
 

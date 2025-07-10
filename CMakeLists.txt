@@ -5,17 +5,28 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# === Build options ===
-# Enable optional static analysis (clang-tidy / cppcheck)
-option(ENABLE_STATIC_ANALYSIS "Run static analysis with clang-tidy / cppcheck" ON)
-# Treat compiler warnings as errors (helpful for CI pipelines)
-option(ENABLE_WERROR "Treat warnings as errors" ON)
+# === Platform and CPU tuning ===
+if(APPLE)
+  # Target ARM64 on Apple Silicon
+  set(CMAKE_OSX_ARCHITECTURES "arm64")
+  # Allow choosing CPU variant (apple-m1 or apple-m2)
+  set(APPLE_CPU "apple-m1" CACHE STRING "Set Apple Silicon CPU: apple-m1 or apple-m2")
+endif()
 
-# === Compiler flags ===
-# Per-config optimization / debug options are kept, add common warnings.
-# Additional compile options are appended to all targets.
+# === Build options ===
+option(ENABLE_STATIC_ANALYSIS "Run static analysis with clang-tidy / cppcheck" ON)
+option(ENABLE_WERROR "Treat warnings as errors" ON)
+option(USE_PGO "Enable Profile-Guided Optimization" OFF)
+
+# === Compiler warnings ===
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     add_compile_options(-Wall -Wextra -Wpedantic)
+    
+    # GCC-specific: disable false positive stringop-overflow warnings with fmt library
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        add_compile_options(-Wno-stringop-overflow)
+    endif()
+    
     if (ENABLE_WERROR)
         add_compile_options(-Werror)
     endif()
@@ -26,7 +37,7 @@ elseif (MSVC)
     endif()
 endif()
 
-# Setup static analysis tools if requested
+# === Static analysis ===
 if (ENABLE_STATIC_ANALYSIS)
     find_program(CLANG_TIDY_EXE NAMES clang-tidy)
     if (CLANG_TIDY_EXE)
@@ -41,11 +52,28 @@ if (ENABLE_STATIC_ANALYSIS)
     endif()
 endif()
 
-# Compiler flags for performance and safety
+# === Build flags per configuration ===
+# Debug: sanitizers and no optimization
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -fsanitize=address -fsanitize=undefined")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+# Release: high optimization, Apple Silicon tuning, LTO, and optional PGO
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+if(APPLE)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mcpu=${APPLE_CPU} -flto")
+else()
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native -flto")
+endif()
 
-# Find required packages
+# PGO flags
+if(USE_PGO)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        # First run: use -fprofile-generate, then rerun with -fprofile-use
+        add_compile_options(-fprofile-generate)
+        # After collecting data, build with -fprofile-use
+        # add_compile_options(-fprofile-use)
+    endif()
+endif()
+
+# === Find dependencies ===
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 
@@ -62,7 +90,7 @@ find_package(Readline)
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# Core library
+# === Core library ===
 add_library(loredb STATIC
     src/storage/page_store.cpp
     src/storage/file_page_store.cpp
@@ -83,8 +111,7 @@ add_library(loredb STATIC
     src/util/crc32.cpp
     src/util/logger.cpp
 )
-
-target_link_libraries(loredb 
+target_link_libraries(loredb
     Threads::Threads
     tl::expected
     fmt::fmt
@@ -92,21 +119,24 @@ target_link_libraries(loredb
     taocpp::pegtl
     TBB::tbb
 )
+# Enable LTO on the core library
+set_target_properties(loredb PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
 
-# CLI executable
+# === CLI executable ===
 add_executable(loredb-cli
     src/cli/main.cpp
     src/cli/repl.cpp
 )
-
 if(Readline_FOUND)
     target_link_libraries(loredb-cli loredb Readline::Readline)
     target_compile_definitions(loredb-cli PRIVATE HAVE_READLINE)
 else()
     target_link_libraries(loredb-cli loredb)
 endif()
+# LTO for CLI
+set_target_properties(loredb-cli PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
 
-# Tests
+# === Tests ===
 add_executable(tests
     tests/storage/test_page_store.cpp
     tests/storage/test_file_page_store.cpp
@@ -118,25 +148,23 @@ add_executable(tests
     tests/transaction/test_mvcc.cpp
     tests/transaction/test_mvcc_graph.cpp
 )
-
-target_link_libraries(tests 
+target_link_libraries(tests
     loredb
     GTest::gtest_main
     GTest::gmock_main
 )
 
-# Benchmarks
+# === Benchmarks ===
 add_executable(benchmarks
     benchmarks/storage_benchmark.cpp
     benchmarks/query_benchmark.cpp
 )
-
 target_link_libraries(benchmarks
     loredb
     benchmark::benchmark
     benchmark::benchmark_main
 )
 
-# Enable testing
+# === Testing ===
 enable_testing()
 add_test(NAME unit_tests COMMAND tests)
