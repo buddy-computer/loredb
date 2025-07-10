@@ -229,7 +229,7 @@ Before building, ensure you have the following dependencies installed:
 ```bash
 # Clone and build (Apple Silicon macOS)
 git clone <repository-url>
-cd wiki-graph
+cd loredb
 ./build.sh
 ```
 
