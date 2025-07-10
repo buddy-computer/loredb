@@ -106,6 +106,7 @@ install_system_deps() {
             sudo apt-get update -qq
             sudo apt-get install -y \
                 build-essential \
+                gcc-11 g++-11 \
                 cmake \
                 pkg-config \
                 git \
@@ -116,6 +117,9 @@ install_system_deps() {
                 libreadline-dev \
                 ninja-build
             ;;
+        # … other OS cases …
+    esac
+}
         centos)
             # Use dnf if available (modern RHEL/CentOS/Fedora), otherwise fall back to yum
             if command_exists dnf; then
