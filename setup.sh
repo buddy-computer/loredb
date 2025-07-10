@@ -117,6 +117,9 @@ install_system_deps() {
                 tar \
                 libreadline-dev \
                 ninja-build
+            
+            log_info "Configuring update-alternatives to use GCC 11..."
+            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 60 --slave /usr/bin/g++ g++ /usr/bin/g++-11
             ;;
         centos)
             # Use dnf if available (modern RHEL/CentOS/Fedora), otherwise fall back to yum
@@ -193,8 +196,17 @@ check_compiler() {
             log_success "GCC $GCC_VERSION found (C++20 compatible)"
             return 0
         else
-            log_warning "GCC $GCC_VERSION found, but GCC 11+ required for C++20"
+            log_warning "GCC $GCC_VERSION found, but GCC 11+ is required. Checking for g++-11."
         fi
+    fi
+    
+    # If default g++ is too old, check for g++-11
+    if command_exists g++-11; then
+        log_info "Found g++-11. Setting it as the compiler."
+        export CC=gcc-11
+        export CXX=g++-11
+        log_success "Using CXX=$CXX (C++20 compatible)"
+        return 0
     fi
     
     if command_exists clang++; then

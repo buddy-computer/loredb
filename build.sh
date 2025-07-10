@@ -39,5 +39,4 @@ cmake .. \
 
 cmake --build . -- -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
 
-popd
 echo "Build complete in ./$BUILD_DIR/"
