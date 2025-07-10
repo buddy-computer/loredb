@@ -10,7 +10,14 @@ CONFIG=${CONFIGURATION:-Release}   # or Debug
 # Allow passing overrides on the command line:
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --cpu)    CPU=$2; shift 2 ;;
+    --cpu)
+      if [[ -z ${2:-} ]]; then
+        echo "Error: --cpu requires an argument" >&2
+        exit 1
+      fi
+      CPU=$2
+      shift 2
+      ;;
     --pgo)    PGO=ON; shift    ;;
     --debug)  CONFIG=Debug; shift ;;
     --release)CONFIG=Release; shift ;;
