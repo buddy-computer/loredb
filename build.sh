@@ -6,6 +6,7 @@ BUILD_DIR=build
 CPU=${APPLE_CPU:-apple-m1}
 PGO=${USE_PGO:-OFF}
 CONFIG=${CONFIGURATION:-Release}   # or Debug
+CLEAN_BUILD="false"
 
 # Allow passing overrides on the command line:
 while [[ $# -gt 0 ]]; do
@@ -21,12 +22,16 @@ while [[ $# -gt 0 ]]; do
     --pgo)    PGO=ON; shift    ;;
     --debug)  CONFIG=Debug; shift ;;
     --release)CONFIG=Release; shift ;;
+    --clean)  CLEAN_BUILD=true; shift ;;
     *)        echo "Unknown option: $1"; exit 1 ;;
   esac
 done
 
 echo "Configuring for CPU=$CPU, PGO=$PGO, Config=$CONFIG"
-rm -rf "$BUILD_DIR"
+if [[ "$CLEAN_BUILD" == "true" ]]; then
+  echo "Cleaning build directory..."
+  rm -rf "$BUILD_DIR"
+fi
 mkdir -p "$BUILD_DIR"
 pushd "$BUILD_DIR"
 trap 'popd' EXIT

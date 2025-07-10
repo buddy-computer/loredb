@@ -37,15 +37,15 @@ A modern, embeddable property graph database engine written in C++20, designed f
 
 ### Quick Start (5 minutes)
 
-**Option 1: Automated Setup (Recommended)**
+### Option 1 — Automated Setup (Recommended)
 
 ```bash
-git clone https://github.com/yourusername/loredb.git
+git clone https://github.com/asnodgrass/loredb.git
 cd loredb
 ./setup.sh
 ```
 
-**Option 2: Manual Setup**
+### Option 2 — Manual Setup
 
 1. **Prerequisites**: Ensure you have CMake 3.20+, C++20 compiler, and vcpkg installed
 2. **Build**: `cmake -B build && cmake --build build`
@@ -87,7 +87,7 @@ Created edge with ID: 1
 For the fastest setup experience, use our automated setup script:
 
 ```bash
-git clone https://github.com/yourusername/loredb.git
+git clone https://github.com/asnodgrass/loredb.git
 cd loredb
 ./setup.sh
 ```
@@ -127,7 +127,7 @@ If you prefer to set things up manually:
 - macOS (10.15+)
 - Windows (Windows 10+)
 
-#### Option 1: Using vcpkg (Recommended)
+### Option 1: Using vcpkg (Recommended)
 
 ```bash
 # 1. Install vcpkg (if not already installed)
@@ -136,7 +136,7 @@ cd vcpkg
 ./bootstrap-vcpkg.sh  # or bootstrap-vcpkg.bat on Windows
 
 # 2. Clone and build LoreDB
-git clone https://github.com/yourusername/loredb.git
+git clone https://github.com/asnodgrass/loredb.git
 cd loredb
 
 # 3. Configure with vcpkg
@@ -152,7 +152,7 @@ cmake --build build --config Release
 ./build/loredb-cli
 ```
 
-#### Option 2: Manual Dependencies
+### Option 2: Manual Dependencies
 
 If you prefer to manage dependencies manually:
 
@@ -164,7 +164,7 @@ sudo apt install build-essential cmake pkg-config
 sudo apt install libfmt-dev libspdlog-dev libtbb-dev libgtest-dev
 sudo apt install libreadline-dev  # Optional, for better CLI experience
 
-git clone https://github.com/yourusername/loredb.git
+git clone https://github.com/asnodgrass/loredb.git
 cd loredb
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
@@ -175,7 +175,7 @@ cmake --build build
 ```bash
 brew install cmake fmt spdlog tbb googletest readline
 
-git clone https://github.com/yourusername/loredb.git
+git clone https://github.com/asnodgrass/loredb.git
 cd loredb
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
@@ -403,17 +403,19 @@ cmake --build . -j$(nproc)
 
 ### Project Structure
 
-```
+```plaintext
 loredb/
 ├── src/
-│   ├── storage/       # Storage engine (pages, records, WAL)
-│   ├── query/         # Query engine (Cypher parser, executor)
-│   ├── transaction/   # MVCC, lock manager
-│   ├── util/          # Logging, utilities
-│   └── cli/           # Command-line interface
-├── tests/             # Unit and integration tests
-├── benchmarks/        # Performance benchmarks
-└── docs/              # Documentation
+│   ├── storage/      # Low-level storage engine (PageStore, WAL)
+│   ├── transaction/  # Concurrency control (MVCC)
+│   ├── query/        # Query execution and language parsing
+│   ├── util/         # Common utilities (logging, error handling)
+│   └── cli/          # Command-line interface
+├── tests/            # Unit and integration tests
+├── benchmarks/       # Performance benchmarks
+├── vcpkg.json        # vcpkg dependencies
+├── CMakeLists.txt    # Main CMake build script
+└── README.md
 ```
 
 ### Core Components

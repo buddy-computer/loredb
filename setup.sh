@@ -48,7 +48,8 @@ detect_os() {
         Linux*)
             # Try to detect Linux distribution from /etc/os-release (systemd standard)
             if [[ -f /etc/os-release ]]; then
-                local distro_id=$(grep '^ID=' /etc/os-release 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+                local distro_id
+                distro_id=$(grep '^ID=' /etc/os-release 2>/dev/null | cut -d'=' -f2 | tr -d '"')
                 case "$distro_id" in
                     ubuntu|debian)
                         OS="ubuntu"
@@ -362,8 +363,8 @@ run_tests() {
 verify_installation() {
     log_info "Verifying installation..."
     
-    # Check if CLI executable exists
-    if [[ -f "$BUILD_DIR/loredb-cli" ]]; then
+    # Check if CLI executable exists and is runnable
+    if [[ -x "$BUILD_DIR/loredb-cli" ]]; then
         log_success "CLI executable found: $BUILD_DIR/loredb-cli"
         
         # Test version command
@@ -373,12 +374,12 @@ verify_installation() {
             log_warning "CLI version check failed"
         fi
     else
-        log_error "CLI executable not found"
+        log_error "CLI executable not found or not executable"
         exit 1
     fi
     
-    # Check if benchmarks exist
-    if [[ -f "$BUILD_DIR/benchmarks" ]]; then
+    # Check if benchmarks exist and are runnable
+    if [[ -x "$BUILD_DIR/benchmarks" ]]; then
         log_success "Benchmarks executable found: $BUILD_DIR/benchmarks"
     fi
 }
@@ -489,7 +490,7 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Run the CLI: ./$BUILD_DIR/loredb-cli"
-    echo "  2. Run tests: ./$BUILD_DIR/tests"
+    echo "  2. Run tests: (cd $BUILD_DIR && ctest --output-on-failure)"
     echo "  3. Run benchmarks: ./$BUILD_DIR/benchmarks"
     echo "  4. Read the documentation: README.md"
     echo ""
