@@ -214,9 +214,11 @@ struct query : seq<
         seq<
             match_clause,
             opt<seq<ws, where_clause>>,
-            opt<seq<ws, return_clause>>,
-            opt<seq<ws, order_by_clause>>,
-            opt<seq<ws, limit_clause>>
+            opt<sor<
+                seq<ws, return_clause, opt<seq<ws, order_by_clause>>, opt<seq<ws, limit_clause>>>,
+                seq<ws, set_clause>,
+                seq<ws, delete_clause>
+            >>
         >,
         // Queries starting with CREATE  
         seq<

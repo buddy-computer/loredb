@@ -10,3 +10,4 @@ vcpkg_installed
 
 # testing
 Testing
+*.db

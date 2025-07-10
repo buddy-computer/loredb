@@ -58,46 +58,62 @@ util::expected<NodeId, Error> GraphStore::create_node(transaction::TransactionId
     return node_id;
 }
 
-util::expected<void, Error> GraphStore::update_node(NodeId node_id, const std::vector<Property>& properties) {
-    // Get existing node
+util::expected<void, Error> GraphStore::update_node(transaction::TransactionId tx_id,
+                                                    NodeId node_id,
+                                                    const std::vector<Property>& properties) {
+    // First perform legacy update so underlying storage is consistent
+    auto res = update_node(node_id, properties);
+    if (!res.has_value()) return res;
+
+    if (mvcc_manager_) {
+        NodeRecord nr{};
+        nr.id = node_id;
+        nr.property_count = properties.size();
+
+        transaction::Version ver;
+        ver.created_tx_id = tx_id;
+        ver.data = nr;
+        ver.properties = properties;
+        auto wr = mvcc_manager_->write_version(node_id, ver);
+        if (!wr.has_value()) {
+            return util::unexpected(Error{ErrorCode::CORRUPTION, "MVCC write failed"});
+        }
+    }
+    if (wal_manager_) {
+        std::stringstream ss; ss << "{\"op\":\"update_node\",\"id\":" << node_id << "}";
+        wal_manager_->log_operation({ss.str()});
+    }
+    return {};
+}
+
+util::expected<void, Error> GraphStore::delete_node(transaction::TransactionId tx_id,
+                                                    NodeId node_id) {
+    // For MVCC, we only create a tombstone version without physically deleting
+    // The legacy delete_node would remove the node from storage, making it invisible to all transactions
+    
+    // First check if the node exists
     auto node_result = get_node(node_id);
     if (!node_result.has_value()) {
         return util::unexpected(node_result.error());
     }
-    
-    auto [node, _] = node_result.value();
-    node.property_count = properties.size();
-    
-    return store_node_record(node_id, node, properties);
-}
 
-util::expected<void, Error> GraphStore::delete_node(NodeId node_id) {
-    // Check if node has edges
-    auto outgoing_result = get_outgoing_edges(node_id);
-    auto incoming_result = get_incoming_edges(node_id);
-    
-    if (outgoing_result.has_value() && !outgoing_result.value().empty()) {
-        return util::unexpected(Error{ErrorCode::INVALID_ARGUMENT, "Cannot delete node with outgoing edges"});
+    if (mvcc_manager_) {
+        NodeRecord tomb{}; tomb.id = node_id;
+        transaction::Version ver{tx_id, tx_id, tomb, std::vector<Property>{}};
+        auto write_result = mvcc_manager_->write_version(node_id, ver);
+        if (!write_result.has_value()) {
+            return util::unexpected(Error{ErrorCode::CORRUPTION, "Failed to write tombstone version"});
+        }
+    } else {
+        // If no MVCC manager, fall back to legacy delete
+        auto res = delete_node(node_id);
+        if (!res.has_value()) return res;
     }
     
-    if (incoming_result.has_value() && !incoming_result.value().empty()) {
-        return util::unexpected(Error{ErrorCode::INVALID_ARGUMENT, "Cannot delete node with incoming edges"});
+    if (wal_manager_) {
+        std::stringstream ss; ss << "{\"op\":\"delete_node\",\"id\":" << node_id << "}";
+        wal_manager_->log_operation({ss.str()});
     }
-    
-    // Remove from node index
-    {
-        std::lock_guard<std::mutex> lock(node_index_mutex_);
-        node_page_index_.erase(node_id);
-    }
-    
-    // Remove from adjacency lists
-    {
-        std::lock_guard<std::mutex> lock(adjacency_mutex_);
-        outgoing_edges_.erase(node_id);
-        incoming_edges_.erase(node_id);
-    }
-    
-    node_count_.fetch_sub(1);
     return {};
 }
 
@@ -558,6 +574,50 @@ util::expected<void, Error> GraphStore::delete_edge(EdgeId edge_id) {
     }
 
     edge_count_.fetch_sub(1);
+    return {};
+}
+
+util::expected<void, Error> GraphStore::update_node(NodeId node_id,
+                                                    const std::vector<Property>& properties) {
+    // Get existing node
+    auto node_result = get_node(node_id);
+    if (!node_result.has_value()) {
+        return util::unexpected(node_result.error());
+    }
+
+    auto [node, _] = node_result.value();
+    node.property_count = properties.size();
+
+    return store_node_record(node_id, node, properties);
+}
+
+util::expected<void, Error> GraphStore::delete_node(NodeId node_id) {
+    // Check if node has edges
+    auto outgoing_result = get_outgoing_edges(node_id);
+    auto incoming_result = get_incoming_edges(node_id);
+
+    if (outgoing_result.has_value() && !outgoing_result.value().empty()) {
+        return util::unexpected(Error{ErrorCode::INVALID_ARGUMENT, "Cannot delete node with outgoing edges"});
+    }
+
+    if (incoming_result.has_value() && !incoming_result.value().empty()) {
+        return util::unexpected(Error{ErrorCode::INVALID_ARGUMENT, "Cannot delete node with incoming edges"});
+    }
+
+    // Remove from node index
+    {
+        std::lock_guard<std::mutex> lock(node_index_mutex_);
+        node_page_index_.erase(node_id);
+    }
+
+    // Remove from adjacency lists
+    {
+        std::lock_guard<std::mutex> lock(adjacency_mutex_);
+        outgoing_edges_.erase(node_id);
+        incoming_edges_.erase(node_id);
+    }
+
+    node_count_.fetch_sub(1);
     return {};
 }
 

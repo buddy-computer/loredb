@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <sstream>
 #include <queue> // Added for BFS
+#include <cmath>
 #include <iostream>
 
 namespace loredb::query::cypher {
@@ -34,6 +35,54 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
     ExecutionContext ctx(graph_store_, index_manager_, tx->id);
     
     try {
+        // Handle MATCH + SET/DELETE queries (write operations)
+        if (query.match.has_value() && (query.set.has_value() || query.delete_clause.has_value())) {
+            // Run match to get bindings
+            auto match_result = execute_match(query.match.value(), ctx);
+            if (!match_result.has_value()) {
+                mvcc_manager_->get_transaction_manager().abort_transaction(tx);
+                mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                return util::unexpected<storage::Error>(match_result.error());
+            }
+
+            ResultSet result_set = std::move(match_result.value());
+
+            if (query.where.has_value()) {
+                auto where_result = apply_where(query.where.value(), result_set, ctx);
+                if (!where_result.has_value()) {
+                    mvcc_manager_->get_transaction_manager().abort_transaction(tx);
+                    mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                    return util::unexpected<storage::Error>(where_result.error());
+                }
+                result_set = std::move(where_result.value());
+            }
+
+            QueryResult write_result({"updated_nodes"});
+            if (query.set.has_value()) {
+                auto set_res = execute_set(query.set.value(), result_set, ctx);
+                if (!set_res.has_value()) {
+                    mvcc_manager_->get_transaction_manager().abort_transaction(tx);
+                    mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                    return util::unexpected<storage::Error>(set_res.error());
+                }
+                write_result = std::move(set_res.value());
+            }
+
+            if (query.delete_clause.has_value()) {
+                auto del_res = execute_delete(query.delete_clause.value(), result_set, ctx);
+                if (!del_res.has_value()) {
+                    mvcc_manager_->get_transaction_manager().abort_transaction(tx);
+                    mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+                    return util::unexpected<storage::Error>(del_res.error());
+                }
+                write_result = std::move(del_res.value());
+            }
+
+            mvcc_manager_->get_transaction_manager().commit_transaction(tx);
+            mvcc_manager_->get_lock_manager().unlock_all(tx->id);
+            return write_result;
+        }
+        
         if (query.is_read_query()) {
             ResultSet result_set;
             
@@ -109,7 +158,7 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
         mvcc_manager_->get_transaction_manager().abort_transaction(tx);
         mvcc_manager_->get_lock_manager().unlock_all(tx->id);
         return util::unexpected<storage::Error>(storage::Error{
-            storage::ErrorCode::INVALID_ARGUMENT, 
+            storage::ErrorCode::INVALID_ARGUMENT,
             "Unsupported query type"
         });
         
@@ -292,7 +341,7 @@ util::expected<std::vector<storage::NodeId>, storage::Error> CypherExecutor::fin
     if (!node.properties.empty()) {
         // Search for nodes with specific properties
         size_t node_count = ctx.graph_store->get_node_count();
-        for (storage::NodeId node_id = 1; node_id <= node_count + 10; ++node_id) {
+        for (storage::NodeId node_id = 1; node_id <= node_count; ++node_id) {
             if (ctx.graph_store->has_mvcc()) {
                 auto node_result = ctx.graph_store->get_node(ctx.tx_id, node_id);
                 if (node_result.has_value()) {
@@ -315,8 +364,8 @@ util::expected<std::vector<storage::NodeId>, storage::Error> CypherExecutor::fin
         // Get all nodes by checking based on node count
         // This is inefficient but works for now - better solution would be to add
         // a get_all_node_ids() method to GraphStore
-                size_t node_count = ctx.graph_store->get_node_count();
-        for (storage::NodeId node_id = 1; node_id <= node_count + 10; ++node_id) {
+        size_t node_count = ctx.graph_store->get_node_count();
+        for (storage::NodeId node_id = 1; node_id <= node_count; ++node_id) {
             if (ctx.graph_store->has_mvcc()) {
                 auto node_result = ctx.graph_store->get_node(ctx.tx_id, node_id);
                 if (node_result.has_value()) {
@@ -650,30 +699,169 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_create(const
     return result;
 }
 
-bool CypherExecutor::matches_property_constraints(const PropertyMap& constraints,
-                                                 const std::vector<storage::Property>& node_properties) {
-    for (const auto& [key, expected_value] : constraints) {
+util::expected<QueryResult, storage::Error> CypherExecutor::execute_set(const SetClause& set_clause,
+                                                                       const ResultSet& input,
+                                                                       ExecutionContext& ctx) {
+    size_t updated_nodes = 0;
+
+    for (const auto& row : input) {
+        auto it = row.bindings.find(set_clause.variable);
+        if (it == row.bindings.end() || it->second.type != VariableBinding::Type::NODE) {
+            continue; // variable not bound to node in this row
+        }
+
+        storage::NodeId node_id = it->second.id_value;
+
+        // Evaluate value expression in context of this row
+        auto val_result = evaluate_expression(*set_clause.value, row.bindings, ctx);
+        if (!val_result.has_value()) {
+            return util::unexpected<storage::Error>(val_result.error());
+        }
+
+        PropertyValue new_value = val_result.value();
+
+        // Fetch existing properties
+        auto node_res = ctx.graph_store->has_mvcc() ? ctx.graph_store->get_node(ctx.tx_id, node_id)
+                                                    : ctx.graph_store->get_node(node_id);
+        if (!node_res.has_value()) {
+            continue;
+        }
+
+        auto [node_record, properties] = node_res.value();
+
         bool found = false;
-        for (const auto& prop : node_properties) {
-            if (prop.key == key) {
-                auto converted_value = std::visit([](const auto& v) -> PropertyValue {
+        for (auto& prop : properties) {
+            if (prop.key == set_clause.property) {
+                // update
+                prop.value = std::visit([](const auto& v) -> storage::PropertyValue {
                     using T = std::decay_t<decltype(v)>;
                     if constexpr (std::is_same_v<T, std::string>) return v;
                     else if constexpr (std::is_same_v<T, int64_t>) return v;
                     else if constexpr (std::is_same_v<T, double>) return v;
                     else if constexpr (std::is_same_v<T, bool>) return v;
                     else return std::string("binary_data");
-                }, prop.value);
-                
-                if (property_value_to_string(converted_value) == property_value_to_string(expected_value)) {
-                    found = true;
-                    break;
-                }
+                }, new_value);
+                found = true;
+                break;
             }
         }
         if (!found) {
-            return false;
+            // add new property
+            storage::PropertyValue sv = std::visit([](const auto& v) -> storage::PropertyValue {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, std::string>) return v;
+                else if constexpr (std::is_same_v<T, int64_t>) return v;
+                else if constexpr (std::is_same_v<T, double>) return v;
+                else if constexpr (std::is_same_v<T, bool>) return v;
+                else return std::string("binary_data");
+            }, new_value);
+            properties.emplace_back(set_clause.property, sv);
         }
+
+        // Apply update
+        auto upd_res = ctx.graph_store->has_mvcc() ?
+            ctx.graph_store->update_node(ctx.tx_id, node_id, properties) :
+            ctx.graph_store->update_node(node_id, properties);
+        if (!upd_res.has_value()) {
+            return util::unexpected<storage::Error>(upd_res.error());
+        }
+
+        updated_nodes++;
+    }
+
+    QueryResult result({"updated_nodes"});
+    result.add_row({std::to_string(updated_nodes)});
+    return result;
+}
+
+util::expected<QueryResult, storage::Error> CypherExecutor::execute_delete(const DeleteClause& delete_clause,
+                                                                          const ResultSet& input,
+                                                                          ExecutionContext& ctx) {
+    size_t deleted_nodes = 0;
+    size_t deleted_edges = 0;
+
+    // For each row in bindings
+    for (const auto& row : input) {
+        for (const auto& var : delete_clause.variables) {
+            auto it = row.bindings.find(var);
+            if (it == row.bindings.end()) continue;
+
+            if (it->second.type == VariableBinding::Type::NODE) {
+                storage::NodeId node_id = it->second.id_value;
+                auto del_res = ctx.graph_store->has_mvcc() ?
+                    ctx.graph_store->delete_node(ctx.tx_id, node_id) :
+                    ctx.graph_store->delete_node(node_id);
+                if (del_res.has_value()) deleted_nodes++;
+            } else if (it->second.type == VariableBinding::Type::EDGE) {
+                storage::EdgeId edge_id = it->second.id_value;
+                auto del_res = ctx.graph_store->has_mvcc() ?
+                    ctx.graph_store->delete_edge(ctx.tx_id, edge_id) :
+                    ctx.graph_store->delete_edge(edge_id);
+                if (del_res.has_value()) deleted_edges++;
+            }
+        }
+    }
+
+    QueryResult result({"deleted_nodes", "deleted_edges"});
+    result.add_row({std::to_string(deleted_nodes), std::to_string(deleted_edges)});
+    return result;
+}
+
+bool CypherExecutor::matches_property_constraints(const PropertyMap& constraints,
+                                                 const std::vector<storage::Property>& node_properties) {
+    for (const auto& [key, expected_value] : constraints) {
+        bool found_match = false;
+        for (const auto& prop : node_properties) {
+            if (prop.key != key) continue;
+
+            // Convert storage::PropertyValue to AST PropertyValue
+            PropertyValue actual_value = std::visit([](const auto& v) -> PropertyValue {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, std::string>) return v;
+                else if constexpr (std::is_same_v<T, int64_t>) return v;
+                else if constexpr (std::is_same_v<T, double>) return v;
+                else if constexpr (std::is_same_v<T, bool>) return v;
+                else return std::string("binary_data");
+            }, prop.value);
+
+            // Compare based on contained types
+            if (actual_value.index() == expected_value.index()) {
+                // Same type – direct comparison via std::visit
+                bool equal = std::visit([](const auto& a, const auto& b) -> bool {
+                    using Ta = std::decay_t<decltype(a)>;
+                    using Tb = std::decay_t<decltype(b)>;
+                    if constexpr (std::is_same_v<Ta, Tb>) {
+                        return a == b;
+                    } else {
+                        // This case should not happen due to index check, but keep safe
+                        return false;
+                    }
+                }, actual_value, expected_value);
+                if (equal) {
+                    found_match = true;
+                    break;
+                }
+            } else {
+                // Handle numeric cross-type comparisons (int vs double)
+                bool actual_is_num = std::holds_alternative<int64_t>(actual_value) || std::holds_alternative<double>(actual_value);
+                bool expected_is_num = std::holds_alternative<int64_t>(expected_value) || std::holds_alternative<double>(expected_value);
+                if (actual_is_num && expected_is_num) {
+                    double act = std::holds_alternative<int64_t>(actual_value) ? static_cast<double>(std::get<int64_t>(actual_value)) : std::get<double>(actual_value);
+                    double exp = std::holds_alternative<int64_t>(expected_value) ? static_cast<double>(std::get<int64_t>(expected_value)) : std::get<double>(expected_value);
+                    if (std::abs(act - exp) < 1e-9) {
+                        found_match = true;
+                        break;
+                    }
+                } else {
+                    // Fallback to string comparison
+                    if (property_value_to_string(actual_value) == property_value_to_string(expected_value)) {
+                        found_match = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!found_match) return false;
     }
     return true;
 }

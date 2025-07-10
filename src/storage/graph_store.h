@@ -81,6 +81,15 @@ public:
         NodeId node_id,
         const std::vector<Property>& properties);
     util::expected<void, Error> delete_node(NodeId node_id);
+
+    // MVCC-aware variants
+    util::expected<void, Error> update_node(
+        transaction::TransactionId tx_id,
+        NodeId node_id,
+        const std::vector<Property>& properties);
+    util::expected<void, Error> delete_node(
+        transaction::TransactionId tx_id,
+        NodeId node_id);
     util::expected<std::pair<NodeRecord, std::vector<Property>>, Error> get_node(NodeId node_id);
     
     // Edge operations

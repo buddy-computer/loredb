@@ -57,6 +57,7 @@ find_package(GTest CONFIG REQUIRED)
 find_package(benchmark CONFIG REQUIRED)
 find_package(pegtl CONFIG REQUIRED)
 find_package(TBB CONFIG REQUIRED)
+find_package(Readline)
 
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -98,7 +99,12 @@ add_executable(loredb-cli
     src/cli/repl.cpp
 )
 
-target_link_libraries(loredb-cli loredb)
+if(Readline_FOUND)
+    target_link_libraries(loredb-cli loredb Readline::Readline)
+    target_compile_definitions(loredb-cli PRIVATE HAVE_READLINE)
+else()
+    target_link_libraries(loredb-cli loredb)
+endif()
 
 # Tests
 add_executable(tests

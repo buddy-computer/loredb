@@ -443,6 +443,78 @@ inline void build_ast_from_tree(const tao::pegtl::parse_tree::node& node, Parser
         
         state.query->order_by = std::move(order_by_clause);
     }
+    else if (node.is_type<grammar::set_clause>()) {
+        // Extract variable.property and value expression
+        std::string variable;
+        std::string property;
+
+        // Find property_access child
+        for (const auto& child : node.children) {
+            if (child->is_type<grammar::property_access>()) {
+                // Iterate grandchildren to get variable and property
+                for (const auto& grand : child->children) {
+                    if (grand->is_type<grammar::identifier>() && variable.empty()) {
+                        variable = grand->string();
+                    } else if (grand->is_type<grammar::property_key>()) {
+                        property = grand->string();
+                    }
+                }
+                break;
+            }
+            // Look inside set_assignment for property_access
+            if (child->is_type<grammar::set_assignment>()) {
+                for (const auto& grand : child->children) {
+                    if (grand->is_type<grammar::property_access>()) {
+                        // Iterate great-grandchildren to get variable and property
+                        for (const auto& great : grand->children) {
+                            if (great->is_type<grammar::identifier>() && variable.empty()) {
+                                variable = great->string();
+                            } else if (great->is_type<grammar::property_key>()) {
+                                property = great->string();
+                            }
+                        }
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        // Expression value should be top of expression_stack
+        std::unique_ptr<Expression> value_expr;
+        if (!state.expression_stack.empty()) {
+            value_expr = std::move(state.expression_stack.top());
+            state.expression_stack.pop();
+        }
+
+        if (!variable.empty() && !property.empty() && value_expr) {
+            SetClause set_clause(variable, property, std::move(value_expr));
+            state.query->set = std::move(set_clause);
+        }
+    }
+    else if (node.is_type<grammar::delete_clause>()) {
+        std::vector<std::string> vars;
+        bool detach = false;
+        for (const auto& child : node.children) {
+            if (child->is_type<grammar::identifier>()) {
+                vars.push_back(child->string());
+            } else if (child->is_type<grammar::detach_keyword>()) {
+                detach = true;
+            }
+            // Look inside delete_list for identifiers
+            if (child->is_type<grammar::delete_list>()) {
+                for (const auto& grand : child->children) {
+                    if (grand->is_type<grammar::identifier>()) {
+                        vars.push_back(grand->string());
+                    }
+                }
+            }
+        }
+        if (!vars.empty()) {
+            DeleteClause del_clause(vars, detach);
+            state.query->delete_clause = std::move(del_clause);
+        }
+    }
 }
 
 

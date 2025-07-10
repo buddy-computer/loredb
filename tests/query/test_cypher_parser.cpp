@@ -477,3 +477,66 @@ TEST_F(CypherParserTest, ExecuteVariableLengthQuery) {
     EXPECT_EQ(names[1], "Charlie");
     EXPECT_EQ(names[2], "David");
 }
+
+TEST_F(CypherParserTest, ExecuteSetClause) {
+    // Create a node first using MVCC transactions
+    std::vector<storage::Property> alice_props = {
+        storage::Property("name", storage::PropertyValue(std::string("Alice"))),
+        storage::Property("age", storage::PropertyValue(int64_t(30)))
+    };
+    
+    auto tx = txn_manager_->begin_transaction();
+    auto alice_result = graph_store_->create_node(tx->id, alice_props);
+    ASSERT_TRUE(alice_result.has_value());
+    txn_manager_->commit_transaction(tx);
+    
+    // Test SET query
+    std::string query_str = "MATCH (n) WHERE n.name = \"Alice\" SET n.age = 31";
+    
+    auto exec_result = executor_->execute_query(query_str);
+    ASSERT_TRUE(exec_result.has_value()) << "Execution failed: " << exec_result.error().message;
+    
+    // Verify the age was updated
+    std::string verify_query = "MATCH (n) RETURN n.name, n.age";
+    auto verify_exec = executor_->execute_query(verify_query);
+    ASSERT_TRUE(verify_exec.has_value());
+    
+    auto result = verify_exec.value();
+    ASSERT_EQ(result.rows.size(), 1);
+    ASSERT_EQ(result.rows[0].size(), 2);
+    EXPECT_EQ(result.rows[0][0], "Alice");
+    EXPECT_EQ(result.rows[0][1], "31");  // Should be updated to 31
+}
+
+TEST_F(CypherParserTest, ExecuteDeleteClause) {
+    // Create some nodes first using MVCC transactions
+    std::vector<storage::Property> alice_props = {
+        storage::Property("name", storage::PropertyValue(std::string("Alice"))),
+        storage::Property("age", storage::PropertyValue(int64_t(30)))
+    };
+    std::vector<storage::Property> bob_props = {
+        storage::Property("name", storage::PropertyValue(std::string("Bob"))),
+        storage::Property("age", storage::PropertyValue(int64_t(25)))
+    };
+    
+    auto tx = txn_manager_->begin_transaction();
+    auto alice_result = graph_store_->create_node(tx->id, alice_props);
+    auto bob_result = graph_store_->create_node(tx->id, bob_props);
+    ASSERT_TRUE(alice_result.has_value());
+    ASSERT_TRUE(bob_result.has_value());
+    txn_manager_->commit_transaction(tx);
+    
+    // Test DELETE query
+    std::string query_str = "MATCH (n) WHERE n.name = \"Alice\" DELETE n";
+    auto exec_result = executor_->execute_query(query_str);
+    ASSERT_TRUE(exec_result.has_value()) << "Execution failed: " << exec_result.error().message;
+    
+    // Verify Alice was deleted but Bob remains
+    std::string verify_query = "MATCH (n) RETURN n.name";
+    auto verify_exec = executor_->execute_query(verify_query);
+    ASSERT_TRUE(verify_exec.has_value());
+    
+    auto result = verify_exec.value();
+    ASSERT_EQ(result.rows.size(), 1);  // Only Bob should remain
+    EXPECT_EQ(result.rows[0][0], "Bob");
+}

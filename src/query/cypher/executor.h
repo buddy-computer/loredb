@@ -44,6 +44,12 @@ private:
                                                               ExecutionContext& ctx);
     util::expected<QueryResult, storage::Error> execute_create(const CreateClause& create_clause, 
                                                               ExecutionContext& ctx);
+    util::expected<QueryResult, storage::Error> execute_set(const SetClause& set_clause,
+                                                           const ResultSet& input,
+                                                           ExecutionContext& ctx);
+    util::expected<QueryResult, storage::Error> execute_delete(const DeleteClause& delete_clause,
+                                                              const ResultSet& input,
+                                                              ExecutionContext& ctx);
     
     // Pattern matching
     util::expected<ResultSet, storage::Error> match_pattern(const Pattern& pattern, 
