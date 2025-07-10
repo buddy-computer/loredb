@@ -32,7 +32,6 @@ private:
     std::shared_ptr<storage::SimpleIndexManager> index_manager_;
     std::shared_ptr<transaction::MVCCManager> mvcc_manager_;
     CypherParser parser_;
-    transaction::TransactionManager txn_manager_;
     
     // Query execution methods
     util::expected<ResultSet, storage::Error> execute_match(const MatchClause& match_clause, 
@@ -44,6 +43,12 @@ private:
                                                               const ResultSet& input, 
                                                               ExecutionContext& ctx);
     util::expected<QueryResult, storage::Error> execute_create(const CreateClause& create_clause, 
+                                                              ExecutionContext& ctx);
+    util::expected<QueryResult, storage::Error> execute_set(const SetClause& set_clause,
+                                                           const ResultSet& input,
+                                                           ExecutionContext& ctx);
+    util::expected<QueryResult, storage::Error> execute_delete(const DeleteClause& delete_clause,
+                                                              const ResultSet& input,
                                                               ExecutionContext& ctx);
     
     // Pattern matching

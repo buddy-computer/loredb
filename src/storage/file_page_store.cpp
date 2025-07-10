@@ -31,7 +31,8 @@ FilePageStore::FilePageStore(const std::string& path, bool sync_on_write)
 }
 
 FilePageStore::~FilePageStore() {
-    close();
+    // Call close() explicitly with class scope to avoid virtual dispatch warning
+    FilePageStore::close();
 }
 
 util::expected<PageId, Error> FilePageStore::allocate_page() {

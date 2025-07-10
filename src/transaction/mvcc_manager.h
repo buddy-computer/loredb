@@ -64,6 +64,11 @@ public:
         return *lock_manager_;
     }
 
+    // Get the transaction manager
+    TransactionManager& get_transaction_manager() {
+        return *txn_manager_;
+    }
+
 private:
     // Check if a version is visible to a transaction
     bool is_version_visible(const Version& version, TransactionId tx_id) const;

@@ -1,5 +1,6 @@
 #include "expression_evaluator.h"
 #include "../../storage/graph_store.h"
+#include <iostream>
 
 namespace loredb::query::cypher {
 
@@ -9,6 +10,7 @@ std::string property_value_to_string(const PropertyValue& value);
 util::expected<PropertyValue, storage::Error> evaluate_expression(const Expression& expr, 
                                                                  const VariableMap& variables, 
                                                                  ExecutionContext& ctx) {
+
     switch (expr.type()) {
         case ExpressionType::LITERAL:
             return std::get<Literal>(expr.content).value;
@@ -31,6 +33,7 @@ util::expected<PropertyValue, storage::Error> evaluate_expression(const Expressi
         
         case ExpressionType::PROPERTY_ACCESS: {
             const auto& prop_access = std::get<PropertyAccess>(expr.content);
+
             auto it = variables.find(prop_access.entity);
             if (it != variables.end() && it->second.type == VariableBinding::Type::NODE) {
                 auto node_id = it->second.id_value;
@@ -98,16 +101,44 @@ util::expected<bool, storage::Error> evaluate_boolean_expression(const Expressio
                 return false;
             }
             
-            std::string left_str = property_value_to_string(left_result.value());
-            std::string right_str = property_value_to_string(right_result.value());
+            // Handle numeric comparisons properly
+            const auto& left_value = left_result.value();
+            const auto& right_value = right_result.value();
             
-            switch (comp.op) {
-                case ComparisonOperator::EQUAL: return left_str == right_str;
-                case ComparisonOperator::NOT_EQUAL: return left_str != right_str;
-                case ComparisonOperator::LESS_THAN: return left_str < right_str;
-                case ComparisonOperator::LESS_EQUAL: return left_str <= right_str;
-                case ComparisonOperator::GREATER_THAN: return left_str > right_str;
-                case ComparisonOperator::GREATER_EQUAL: return left_str >= right_str;
+            // Check if both values are numeric (int64_t or double)
+            bool left_is_numeric = std::holds_alternative<int64_t>(left_value) || std::holds_alternative<double>(left_value);
+            bool right_is_numeric = std::holds_alternative<int64_t>(right_value) || std::holds_alternative<double>(right_value);
+            
+            if (left_is_numeric && right_is_numeric) {
+                // Both values are numeric - do numeric comparison
+                double left_num = std::holds_alternative<int64_t>(left_value) 
+                    ? static_cast<double>(std::get<int64_t>(left_value))
+                    : std::get<double>(left_value);
+                double right_num = std::holds_alternative<int64_t>(right_value)
+                    ? static_cast<double>(std::get<int64_t>(right_value))
+                    : std::get<double>(right_value);
+                    
+                switch (comp.op) {
+                    case ComparisonOperator::EQUAL: return left_num == right_num;
+                    case ComparisonOperator::NOT_EQUAL: return left_num != right_num;
+                    case ComparisonOperator::LESS_THAN: return left_num < right_num;
+                    case ComparisonOperator::LESS_EQUAL: return left_num <= right_num;
+                    case ComparisonOperator::GREATER_THAN: return left_num > right_num;
+                    case ComparisonOperator::GREATER_EQUAL: return left_num >= right_num;
+                }
+            } else {
+                // Fall back to string comparison for non-numeric values
+                std::string left_str = property_value_to_string(left_value);
+                std::string right_str = property_value_to_string(right_value);
+                
+                switch (comp.op) {
+                    case ComparisonOperator::EQUAL: return left_str == right_str;
+                    case ComparisonOperator::NOT_EQUAL: return left_str != right_str;
+                    case ComparisonOperator::LESS_THAN: return left_str < right_str;
+                    case ComparisonOperator::LESS_EQUAL: return left_str <= right_str;
+                    case ComparisonOperator::GREATER_THAN: return left_str > right_str;
+                    case ComparisonOperator::GREATER_EQUAL: return left_str >= right_str;
+                }
             }
             break;
         }

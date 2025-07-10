@@ -10,6 +10,10 @@
 #include <iomanip>
 #include <algorithm>
 #include <chrono>
+#ifdef HAVE_READLINE
+#include <readline/readline.h>
+#include <readline/history.h>
+#endif
 
 namespace loredb::cli {
 
@@ -30,26 +34,58 @@ REPL::~REPL() = default;
 void REPL::run() {
     print_banner();
     print_help();
-    
-    std::string line;
-    while (running_ && std::getline(std::cin, line)) {
-        if (line.empty()) continue;
-        
+
+#ifdef HAVE_READLINE
+    const char* prompt = "> ";
+#endif
+
+    std::string buffer; // For multiline input accumulation
+
+    while (running_) {
+        std::string line;
+#ifdef HAVE_READLINE
+        char* input_c = readline(prompt);
+        if (!input_c) {
+            std::cout << std::endl;
+            break; // EOF / Ctrl-D
+        }
+        line = std::string(input_c);
+        free(input_c);
+        if (!line.empty()) add_history(line.c_str());
+#else
+        if (!std::getline(std::cin, line)) break;
+#endif
+
+        // Multiline continuation: if line ends with '\\', keep accumulating
+        bool continues = !line.empty() && line.back() == '\\';
+        if (continues) {
+            line.pop_back(); // remove trailing backslash
+            buffer += line + "\n";
+            continue; // prompt again
+        } else {
+            buffer += line;
+        }
+
+        if (buffer.empty()) {
+            continue; // skip empty lines
+        }
+
         try {
             auto start_time = std::chrono::high_resolution_clock::now();
-            process_command(line);
+            process_command(buffer);
             auto end_time = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
-            
-            LOG_PERFORMANCE("command", duration.count() / 1000.0, "cmd: {}", line);
+            LOG_PERFORMANCE("command", duration.count() / 1000.0, "cmd: {}", buffer);
         } catch (const std::exception& e) {
-            LOG_ERROR_DETAILED("REPL", "command_error", "command: {} - error: {}", line, e.what());
+            LOG_ERROR_DETAILED("REPL", "command_error", "command: {} - error: {}", buffer, e.what());
             std::cerr << "Error: " << e.what() << std::endl;
         }
-        
-        if (running_) {
-            std::cout << "> ";
-        }
+
+        buffer.clear();
+
+#ifndef HAVE_READLINE
+        if (running_) std::cout << "> ";
+#endif
     }
 }
 
@@ -84,6 +120,7 @@ void REPL::print_help() {
     std::cout << "  related <id> [limit]           - Find related documents" << std::endl;
     std::cout << "  suggest <id> <content>         - Suggest links for document" << std::endl;
     std::cout << "  cypher <query>                 - Execute a Cypher query" << std::endl;
+    std::cout << "  clear                          - Clear the screen" << std::endl;
     std::cout << "  help                           - Show this help" << std::endl;
     std::cout << "  exit                           - Exit the program" << std::endl;
     std::cout << std::endl;
@@ -131,6 +168,9 @@ void REPL::process_command(const std::string& command) {
         cmd_suggest(args);
     } else if (cmd == "cypher") {
         cmd_cypher(args);
+    } else if (cmd == "clear") {
+        // Clear screen using ANSI escape (works on most terminals)
+        std::cout << "\033c";
     } else if (cmd == "help") {
         cmd_help(args);
     } else if (cmd == "exit" || cmd == "quit") {

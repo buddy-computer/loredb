@@ -138,7 +138,8 @@ struct undirected_edge : seq<
     one<']'>,
     one<'-'>
 > {};
-struct edge_pattern : sor<directed_edge, undirected_edge> {};
+struct simple_undirected_edge : seq<one<'-'>, one<'-'>> {};
+struct edge_pattern : sor<directed_edge, undirected_edge, simple_undirected_edge> {};
 
 // Path patterns
 struct path_element : sor<node_pattern, edge_pattern> {};
@@ -205,17 +206,36 @@ struct order_item : seq<expression, opt<seq<ws, order_direction>>> {};
 struct order_list : list<order_item, seq<opt_ws, one<','>, opt_ws>> {};
 struct order_by_clause : seq<order_keyword, ws, by_keyword, ws, order_list> {};
 
-// Complete query
+// Complete query - reorganized to allow any clause to start
 struct query : seq<
     opt_ws,
-    opt<match_clause>,
-    opt<seq<ws, where_clause>>,
-    opt<seq<ws, create_clause>>,
-    opt<seq<ws, set_clause>>,
-    opt<seq<ws, delete_clause>>,
-    opt<seq<ws, return_clause>>,
-    opt<seq<ws, order_by_clause>>,
-    opt<seq<ws, limit_clause>>,
+    sor<
+        // Queries starting with MATCH
+        seq<
+            match_clause,
+            opt<seq<ws, where_clause>>,
+            opt<sor<
+                seq<ws, return_clause, opt<seq<ws, order_by_clause>>, opt<seq<ws, limit_clause>>>,
+                seq<ws, set_clause>,
+                seq<ws, delete_clause>
+            >>
+        >,
+        // Queries starting with CREATE  
+        seq<
+            create_clause,
+            opt<seq<ws, return_clause>>
+        >,
+        // Queries starting with SET
+        seq<
+            set_clause,
+            opt<seq<ws, return_clause>>
+        >,
+        // Queries starting with DELETE
+        seq<
+            delete_clause,
+            opt<seq<ws, return_clause>>
+        >
+    >,
     opt_ws,
     eof
 > {};

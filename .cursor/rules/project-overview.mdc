@@ -1,6 +1,6 @@
-# Wiki-Graph Project Overview
+# LoreDB Project Overview
 
-This project implements a graph database from scratch in C++. It is named `wiki-graph` and appears to be designed for handling graph-structured data, possibly with a focus on performance and direct file-based storage.
+This project implements a graph database from scratch in C++. It is named `loredb` and appears to be designed for handling graph-structured data, possibly with a focus on performance and direct file-based storage.
 
 ## Key Features
 
@@ -27,4 +27,4 @@ The project uses CMake and vcpkg for dependency management. To build the project
 1.  Make sure you have CMake and a C++ compiler installed.
 2.  `vcpkg` is integrated via `CMakeLists.txt`.
 3.  Run `cmake -B build && cmake --build build`.
-4.  The main executable will be `build/src/cli/wiki-graph-cli`.
+4.  The main executable will be `build/src/cli/loredb-cli`.

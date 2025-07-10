@@ -80,7 +80,27 @@ public:
     util::expected<void, Error> update_node(
         NodeId node_id,
         const std::vector<Property>& properties);
+    /**
+     * @brief Delete a node immediately (legacy, non-MVCC version).
+     * 
+     * This method physically removes the node from storage immediately
+     * and is used only when MVCC is disabled. Unlike the MVCC version,
+     * this does not create a tombstone record and the deletion is
+     * irreversible within the same transaction context.
+     * 
+     * @param node_id The ID of the node to delete.
+     * @return Success or Error.
+     */
     util::expected<void, Error> delete_node(NodeId node_id);
+
+    // MVCC-aware variants
+    util::expected<void, Error> update_node(
+        transaction::TransactionId tx_id,
+        NodeId node_id,
+        const std::vector<Property>& properties);
+    util::expected<void, Error> delete_node(
+        transaction::TransactionId tx_id,
+        NodeId node_id);
     util::expected<std::pair<NodeRecord, std::vector<Property>>, Error> get_node(NodeId node_id);
     
     // Edge operations
