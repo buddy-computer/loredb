@@ -35,9 +35,375 @@ A modern, embeddable property graph database engine written in C++20, designed f
 
 ## Getting Started
 
-- Build with CMake 3.20+ and vcpkg dependencies.
-- Run `loredb-cli` for the interactive shell.
-- See `tests/` for usage examples and test coverage.
+### Quick Start (5 minutes)
+
+1. **Prerequisites**: Ensure you have CMake 3.20+, C++20 compiler, and vcpkg installed
+2. **Build**: `cmake -B build && cmake --build build`
+3. **Run**: `./build/loredb-cli`
+4. **Try it**: Create your first graph!
+
+```bash
+> create-node name=Alice,age=30
+Created node with ID: 1
+
+> create-node name=Bob,age=25
+Created node with ID: 2
+
+> create-edge 1 2 KNOWS weight=0.8
+Created edge with ID: 1
+
+> cypher MATCH (a)-[r:KNOWS]->(b) RETURN a.name, b.name, r.weight
++-------+-------+--------+
+| a.name| b.name| r.weight|
++-------+-------+--------+
+| Alice | Bob   | 0.8    |
++-------+-------+--------+
+```
+
+### Key Features at a Glance
+
+- **🚀 Modern C++20**: High-performance graph database with MVCC and WAL
+- **💾 Persistent Storage**: File-backed storage with crash recovery
+- **🔍 Cypher Queries**: SQL-like query language for graph traversal
+- **🧵 Thread-Safe**: Concurrent access with snapshot isolation
+- **📊 Analytics**: Path finding, centrality measures, and graph algorithms
+- **🛠️ Extensible**: Modular architecture for custom storage and query engines
+
+## Setup & Installation
+
+### Prerequisites
+
+**Required:**
+
+- **CMake 3.20+** - Build system
+- **C++20 Compiler** - GCC 11+, Clang 14+, or MSVC 2022+
+- **vcpkg** - Package manager for C++ dependencies
+
+**Platform Support:**
+
+- Linux (Ubuntu 20.04+, CentOS 8+)
+- macOS (10.15+)
+- Windows (Windows 10+)
+
+### Option 1: Using vcpkg (Recommended)
+
+```bash
+# 1. Install vcpkg (if not already installed)
+git clone https://github.com/Microsoft/vcpkg.git
+cd vcpkg
+./bootstrap-vcpkg.sh  # or bootstrap-vcpkg.bat on Windows
+
+# 2. Clone and build LoreDB
+git clone https://github.com/yourusername/loredb.git
+cd loredb
+
+# 3. Configure with vcpkg
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+# 4. Build
+cmake --build build --config Release
+
+# 5. Run tests
+./build/tests
+
+# 6. Start CLI
+./build/loredb-cli
+```
+
+### Option 2: Manual Dependencies
+
+If you prefer to manage dependencies manually:
+
+**Ubuntu/Debian:**
+
+```bash
+sudo apt update
+sudo apt install build-essential cmake pkg-config
+sudo apt install libfmt-dev libspdlog-dev libtbb-dev libgtest-dev
+sudo apt install libreadline-dev  # Optional, for better CLI experience
+
+git clone https://github.com/yourusername/loredb.git
+cd loredb
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+**macOS:**
+
+```bash
+brew install cmake fmt spdlog tbb googletest readline
+
+git clone https://github.com/yourusername/loredb.git
+cd loredb
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+### Build Options
+
+```bash
+# Debug build with sanitizers
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+
+# Release build with optimizations
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+# Enable static analysis
+cmake -B build -DENABLE_STATIC_ANALYSIS=ON
+
+# Disable warnings-as-errors
+cmake -B build -DENABLE_WERROR=OFF
+```
+
+### Verification
+
+```bash
+# Run unit tests
+./build/tests
+
+# Run benchmarks
+./build/benchmarks
+
+# Check CLI help
+./build/loredb-cli --help
+
+# Run CLI with custom database path
+./build/loredb-cli my_database.db
+```
+
+## Development Guide
+
+### Project Structure
+
+```
+loredb/
+├── src/
+│   ├── storage/       # Storage engine (pages, records, WAL)
+│   ├── query/         # Query engine (Cypher parser, executor)
+│   ├── transaction/   # MVCC, lock manager
+│   ├── util/          # Logging, utilities
+│   └── cli/           # Command-line interface
+├── tests/             # Unit and integration tests
+├── benchmarks/        # Performance benchmarks
+└── docs/              # Documentation
+```
+
+### Core Components
+
+#### Storage Layer (`src/storage/`)
+
+- **`PageStore`**: Abstract interface for page-based storage
+- **`FilePageStore`**: File-backed persistent storage with memory mapping
+- **`GraphStore`**: High-level graph operations (nodes, edges, properties)
+- **`WALManager`**: Write-ahead logging for durability
+- **`IndexManager`**: Property and adjacency indexing
+
+#### Query Engine (`src/query/`)
+
+- **`QueryExecutor`**: High-level query API
+- **`cypher/Parser`**: Cypher query language parser
+- **`cypher/Executor`**: Query execution engine
+- **`Planner`**: Query optimization and planning
+
+#### Transaction System (`src/transaction/`)
+
+- **`MVCCManager`**: Multi-version concurrency control
+- **`LockManager`**: Lock acquisition and deadlock detection
+- **`TransactionManager`**: Transaction lifecycle management
+
+### Writing Code
+
+#### Coding Standards
+
+- Follow the [C++ Style Guide](.cursor/rules/cpp-style.mdc)
+- Use C++20 features (concepts, ranges, coroutines where appropriate)
+- Prefer `util::expected<T, Error>` for error handling
+- Use smart pointers and RAII for resource management
+
+#### Error Handling Example
+
+```cpp
+#include "util/expected.h"
+
+util::expected<NodeId, Error> create_node(const Properties& props) {
+    if (props.empty()) {
+        return util::unexpected(Error{ErrorCode::INVALID_ARGUMENT, "Empty properties"});
+    }
+
+    // Implementation...
+    return NodeId{42};
+}
+```
+
+#### Logging Example
+
+```cpp
+#include "util/logger.h"
+
+void some_operation() {
+    LOG_INFO("Starting operation with {} items", item_count);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    // ... do work ...
+    auto end = std::chrono::high_resolution_clock::now();
+
+    LOG_PERFORMANCE("operation_name",
+                   std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(),
+                   "processed {} items", item_count);
+}
+```
+
+### Testing
+
+#### Writing Tests
+
+All tests use GoogleTest framework:
+
+```cpp
+#include <gtest/gtest.h>
+#include "storage/graph_store.h"
+
+class GraphStoreTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        store = std::make_unique<GraphStore>(/* ... */);
+    }
+
+    std::unique_ptr<GraphStore> store;
+};
+
+TEST_F(GraphStoreTest, CreateNodeSuccess) {
+    Properties props = {{"name", "Alice"}, {"age", "30"}};
+    auto result = store->create_node(props);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_GT(result.value(), 0);
+}
+```
+
+#### Running Tests
+
+```bash
+# Run all tests
+./build/tests
+
+# Run specific test suite
+./build/tests --gtest_filter="GraphStoreTest.*"
+
+# Run tests with verbose output
+./build/tests --gtest_filter="*" --gtest_output=xml
+```
+
+### Common Development Tasks
+
+#### Adding a New Storage Engine
+
+1. Implement `PageStore` interface
+2. Add to `CMakeLists.txt`
+3. Write unit tests in `tests/storage/`
+4. Update documentation
+
+#### Adding a New Query Operation
+
+1. Extend Cypher grammar in `query/cypher/grammar.h`
+2. Add AST node in `query/cypher/ast.h`
+3. Implement executor logic in `query/cypher/executor.cpp`
+4. Add parser tests in `tests/query/`
+
+#### Performance Optimization
+
+1. Add benchmarks in `benchmarks/`
+2. Profile with `perf` or similar tools
+3. Use `LOG_PERFORMANCE` for timing
+4. Consider lock-free data structures from Intel TBB
+
+### Debugging
+
+#### Debug Build
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+```
+
+#### Using Debuggers
+
+```bash
+# GDB
+gdb ./build/loredb-cli
+(gdb) run my_database.db
+
+# LLDB
+lldb ./build/loredb-cli
+(lldb) process launch -- my_database.db
+```
+
+#### Memory Debugging
+
+```bash
+# AddressSanitizer (enabled in debug builds)
+./build/tests
+
+# Valgrind
+valgrind --leak-check=full ./build/tests
+```
+
+### Contributing Workflow
+
+1. **Fork & Clone**: Fork the repository and clone your fork
+2. **Branch**: Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Develop**: Write code following our standards
+4. **Test**: Ensure all tests pass and add new tests
+5. **Document**: Update documentation and add Doxygen comments
+6. **Commit**: Use conventional commits (`feat: add new indexing strategy`)
+7. **Pull Request**: Submit PR with clear description
+
+#### Commit Message Format
+
+```
+type(scope): description
+
+- feat: new feature
+- fix: bug fix
+- docs: documentation
+- style: formatting
+- refactor: code restructuring
+- test: adding tests
+- perf: performance improvement
+```
+
+### IDE Setup
+
+#### Visual Studio Code
+
+Recommended extensions:
+
+- C/C++ Extension Pack
+- CMake Tools
+- GitLens
+- Better C++ Syntax
+
+#### CLion
+
+- Import CMake project
+- Enable built-in code analysis
+- Configure unit test runner
+
+### Performance Tips
+
+- Use `CMAKE_BUILD_TYPE=Release` for benchmarks
+- Profile with `perf record` and `perf report`
+- Monitor memory usage with `valgrind --tool=massif`
+- Use `LOG_PERFORMANCE` macros for timing critical sections
+- Consider Intel TBB for parallel algorithms
+
+### Getting Help
+
+- **Documentation**: Check Doxygen comments in headers
+- **Tests**: Look at `tests/` for usage examples
+- **Issues**: Search existing GitHub issues
+- **Discussions**: Start a discussion for design questions
+- **Code Review**: Submit draft PRs for early feedback
 
 ## Roadmap
 
