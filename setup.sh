@@ -424,6 +424,7 @@ parse_args() {
                 exit 0
                 ;;
             -t|--type)
+                [[ -n ${2:-} ]] || { log_error "--type requires an argument"; exit 1; }
                 BUILD_TYPE="$2"
                 shift 2
                 ;;
