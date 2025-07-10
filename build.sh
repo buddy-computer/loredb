@@ -22,7 +22,7 @@ echo "Configuring for CPU=$CPU, PGO=$PGO, Config=$CONFIG"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 pushd "$BUILD_DIR"
-
+trap 'popd' EXIT
 cmake .. \
   -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake \
   -DAPPLE_CPU="$CPU" \
