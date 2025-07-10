@@ -35,6 +35,7 @@ PROJECT_NAME="LoreDB"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 VCPKG_ROOT="${VCPKG_ROOT:-$HOME/vcpkg}"
 BUILD_DIR="build"
+CLEAN_BUILD="false"
 SKIP_TESTS="${SKIP_TESTS:-false}"
 CLEAN_BUILD="${CLEAN_BUILD:-false}"
 PARALLEL_JOBS="${PARALLEL_JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
@@ -325,14 +326,27 @@ run_tests() {
         return 0
     fi
     
-    log_info "Running tests..."
+    log_info "Running tests with CTest..."
     
-    if [[ -f "$BUILD_DIR/tests" ]]; then
-        "./$BUILD_DIR/tests"
+    # Change to build directory to run CTest
+    cd "$BUILD_DIR"
+    
+    # Run CTest with appropriate options
+    CTEST_ARGS=(
+        --output-on-failure          # Show test output when tests fail
+        --parallel "$PARALLEL_JOBS"  # Run tests in parallel
+        --build-config "$BUILD_TYPE" # Specify build configuration
+    )
+    
+    if ctest "${CTEST_ARGS[@]}"; then
         log_success "All tests passed"
     else
-        log_warning "Test executable not found, skipping tests"
+        log_error "Some tests failed"
+        cd - > /dev/null
+        return 1
     fi
+    
+    cd - > /dev/null
 }
 
 # Verify installation
