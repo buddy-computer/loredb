@@ -42,7 +42,8 @@ PARALLEL_JOBS="${PARALLEL_JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/
 
 # Detect OS using portable methods
 detect_os() {
-    local uname_s=$(uname -s)
+    local uname_s
+    uname_s=$(uname -s)
     
     case "$uname_s" in
         Linux*)
@@ -118,9 +119,6 @@ install_system_deps() {
                 libreadline-dev \
                 ninja-build
             ;;
-        # … other OS cases …
-    esac
-}
         centos)
             # Use dnf if available (modern RHEL/CentOS/Fedora), otherwise fall back to yum
             if command_exists dnf; then
