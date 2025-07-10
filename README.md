@@ -37,10 +37,21 @@ A modern, embeddable property graph database engine written in C++20, designed f
 
 ### Quick Start (5 minutes)
 
+**Option 1: Automated Setup (Recommended)**
+
+```bash
+git clone https://github.com/yourusername/loredb.git
+cd loredb
+./setup.sh
+```
+
+**Option 2: Manual Setup**
+
 1. **Prerequisites**: Ensure you have CMake 3.20+, C++20 compiler, and vcpkg installed
 2. **Build**: `cmake -B build && cmake --build build`
 3. **Run**: `./build/loredb-cli`
-4. **Try it**: Create your first graph!
+
+**Try it**: Create your first graph!
 
 ```bash
 > create-node name=Alice,age=30
@@ -71,7 +82,38 @@ Created edge with ID: 1
 
 ## Setup & Installation
 
-### Prerequisites
+### Automated Setup (Recommended)
+
+For the fastest setup experience, use our automated setup script:
+
+```bash
+git clone https://github.com/yourusername/loredb.git
+cd loredb
+./setup.sh
+```
+
+The script will:
+
+- ✅ Install all system dependencies
+- ✅ Setup vcpkg and install C++ packages
+- ✅ Configure and build the project
+- ✅ Run tests to verify everything works
+- ✅ Provide next steps
+
+**Script Options:**
+
+```bash
+./setup.sh -t Debug      # Debug build
+./setup.sh -j 8          # Use 8 parallel jobs
+./setup.sh --skip-tests  # Skip running tests
+./setup.sh --help        # Show all options
+```
+
+### Manual Setup
+
+If you prefer to set things up manually:
+
+#### Prerequisites
 
 **Required:**
 
@@ -85,7 +127,7 @@ Created edge with ID: 1
 - macOS (10.15+)
 - Windows (Windows 10+)
 
-### Option 1: Using vcpkg (Recommended)
+#### Option 1: Using vcpkg (Recommended)
 
 ```bash
 # 1. Install vcpkg (if not already installed)
@@ -110,7 +152,7 @@ cmake --build build --config Release
 ./build/loredb-cli
 ```
 
-### Option 2: Manual Dependencies
+#### Option 2: Manual Dependencies
 
 If you prefer to manage dependencies manually:
 
@@ -139,7 +181,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-### Build Options
+#### Build Options
 
 ```bash
 # Debug build with sanitizers
@@ -155,7 +197,7 @@ cmake -B build -DENABLE_STATIC_ANALYSIS=ON
 cmake -B build -DENABLE_WERROR=OFF
 ```
 
-### Verification
+#### Verification
 
 ```bash
 # Run unit tests
