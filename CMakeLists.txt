@@ -40,10 +40,14 @@ endif()
 # === Static analysis ===
 if (ENABLE_STATIC_ANALYSIS)
     find_program(CLANG_TIDY_EXE NAMES clang-tidy)
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CLANG_TIDY_EXE)
+    if (CLANG_TIDY_EXE)
         message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
-        set(CMAKE_CXX_CLANG_TIDY
-            "${CLANG_TIDY_EXE};-config=;--extra-arg=-Wno-stringop-overflow")
+        # Only add GCC-specific flags when using GCC compiler
+        if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE};-config=;--extra-arg=-Wno-stringop-overflow")
+        else()
+            set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE};-config=")
+        endif()
     endif()
     find_program(CPPCHECK_EXE NAMES cppcheck)
     if (CPPCHECK_EXE)
