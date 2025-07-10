@@ -191,11 +191,11 @@ setup_vcpkg() {
 configure_cmake() {
     log_info "Configuring CMake build..."
     
-    # Remove old build directory if it exists
-    if [[ -d "$BUILD_DIR" ]]; then
+    # Remove build directory only when explicitly requested
+    if [[ "$CLEAN_BUILD" == "true" && -d "$BUILD_DIR" ]]; then
         rm -rf "$BUILD_DIR"
     fi
-    
+
     CMAKE_ARGS=(
         -B "$BUILD_DIR"
         -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
