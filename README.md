@@ -213,6 +213,192 @@ cmake -B build -DENABLE_WERROR=OFF
 ./build/loredb-cli my_database.db
 ```
 
+## Build Instructions
+
+### Prerequisites
+
+Before building, ensure you have the following dependencies installed:
+
+- **CMake** (3.20 or higher)
+- **C++20 compatible compiler** (Clang 14+, GCC 11+, or MSVC 2019+)
+- **vcpkg** (automatically set up by the build script)
+- **pkg-config** (for some dependencies)
+
+### Quick Start
+
+```bash
+# Clone and build (Apple Silicon macOS)
+git clone <repository-url>
+cd wiki-graph
+./build.sh
+```
+
+### Build Script Usage
+
+The `./build.sh` script provides a convenient way to build LoreDB with optimized settings for different platforms.
+
+#### Basic Usage
+
+```bash
+./build.sh [options]
+```
+
+#### Command Line Options
+
+| Option         | Description                        | Default    |
+| -------------- | ---------------------------------- | ---------- |
+| `--cpu <type>` | Set Apple Silicon CPU type         | `apple-m1` |
+| `--pgo`        | Enable Profile-Guided Optimization | `OFF`      |
+| `--debug`      | Build in Debug mode                | `Release`  |
+| `--release`    | Build in Release mode              | `Release`  |
+
+#### Environment Variables
+
+You can also configure the build using environment variables:
+
+| Variable        | Description                             | Default    |
+| --------------- | --------------------------------------- | ---------- |
+| `APPLE_CPU`     | Apple Silicon CPU type                  | `apple-m1` |
+| `USE_PGO`       | Enable PGO (`ON`/`OFF`)                 | `OFF`      |
+| `CONFIGURATION` | Build configuration (`Debug`/`Release`) | `Release`  |
+
+### Platform-Specific Instructions
+
+#### Apple Silicon macOS
+
+The build script is optimized for Apple Silicon Macs. Choose the appropriate CPU type:
+
+```bash
+# For M1 Macs (default)
+./build.sh --cpu apple-m1
+
+# For M2 Macs
+./build.sh --cpu apple-m2
+
+# For M3 Macs
+./build.sh --cpu apple-m3
+
+# For M4 Macs
+./build.sh --cpu apple-m4
+```
+
+#### Performance Builds
+
+For maximum performance on Apple Silicon:
+
+```bash
+# Release build with PGO (Profile-Guided Optimization)
+./build.sh --cpu apple-m4 --pgo --release
+
+# Using environment variables
+APPLE_CPU=apple-m4 USE_PGO=ON CONFIGURATION=Release ./build.sh
+```
+
+#### Development Builds
+
+For development and debugging:
+
+```bash
+# Debug build with symbols and sanitizers
+./build.sh --debug
+
+# Or with specific CPU target
+./build.sh --cpu apple-m3 --debug
+```
+
+### Build Outputs
+
+After a successful build, you'll find the following executables in the `./build/` directory:
+
+- **`loredb-cli`** - Main CLI interface
+- **`tests`** - Test suite
+- **`benchmarks`** - Performance benchmarks
+- **`libloredb.a`** - Static library
+
+### Build Examples
+
+```bash
+# Standard development build
+./build.sh
+
+# High-performance production build for M4 Mac
+./build.sh --cpu apple-m4 --pgo --release
+
+# Debug build for development
+./build.sh --debug
+
+# Using environment variables for CI/CD
+APPLE_CPU=apple-m3 CONFIGURATION=Release ./build.sh
+```
+
+### Dependency Management
+
+The build script automatically manages dependencies using vcpkg:
+
+- **vcpkg** is expected to be in the `./vcpkg/` directory
+- Dependencies are defined in `vcpkg.json`
+- The script automatically installs missing dependencies
+
+If you need to manually install dependencies:
+
+```bash
+./vcpkg/vcpkg install
+```
+
+### Troubleshooting
+
+#### Common Issues
+
+1. **vcpkg not found**
+
+   ```bash
+   # Clone vcpkg if not present
+   git clone https://github.com/Microsoft/vcpkg.git
+   ./vcpkg/bootstrap-vcpkg.sh
+   ```
+
+2. **Missing dependencies**
+
+   ```bash
+   # Reinstall dependencies
+   ./vcpkg/vcpkg install --recurse
+   ```
+
+3. **Build fails with warnings**
+   - The script disables `-Werror` by default
+   - For stricter builds, edit `CMakeLists.txt` to enable `ENABLE_WERROR`
+
+#### Build Configurations
+
+| Configuration   | Use Case               | Optimizations                           |
+| --------------- | ---------------------- | --------------------------------------- |
+| `Debug`         | Development, debugging | `-g -O0`, sanitizers enabled            |
+| `Release`       | Production             | `-O3`, LTO enabled, CPU-specific tuning |
+| `Release + PGO` | Maximum performance    | Additional profile-guided optimizations |
+
+### Cross-Platform Notes
+
+While the current `build.sh` is optimized for macOS, the CMake configuration supports other platforms:
+
+- **Linux**: Use standard CMake commands with vcpkg
+- **Windows**: Use CMake with Visual Studio or vcpkg
+- **Other Unix**: May work with minor modifications to the build script
+
+For non-macOS platforms, use CMake directly:
+
+```bash
+mkdir build && cd build
+cmake .. -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake
+cmake --build . -j$(nproc)
+```
+
+### Performance Tips
+
+1. **Use the correct CPU target**: Match your exact Apple Silicon model
+2. **Enable PGO for production**: Provides 5-15% performance improvement
+3. **Use Release mode**: Significant performance difference vs Debug
+4. **Consider LTO**: Already enabled in Release builds for better optimization
+
 ## Development Guide
 
 ### Project Structure
