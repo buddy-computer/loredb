@@ -32,7 +32,6 @@ private:
     std::shared_ptr<storage::SimpleIndexManager> index_manager_;
     std::shared_ptr<transaction::MVCCManager> mvcc_manager_;
     CypherParser parser_;
-    transaction::TransactionManager txn_manager_;
     
     // Query execution methods
     util::expected<ResultSet, storage::Error> execute_match(const MatchClause& match_clause, 

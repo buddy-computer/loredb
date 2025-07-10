@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <sstream>
 #include <queue> // Added for BFS
+#include <iostream>
 
 namespace loredb::query::cypher {
 
@@ -29,7 +30,7 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
 }
 
 util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const Query& query) {
-    auto tx = txn_manager_.begin_transaction();
+    auto tx = mvcc_manager_->get_transaction_manager().begin_transaction();
     ExecutionContext ctx(graph_store_, index_manager_, tx->id);
     
     try {
@@ -39,7 +40,7 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
             if (query.match.has_value()) {
                 auto match_result = execute_match(query.match.value(), ctx);
                 if (!match_result.has_value()) {
-                    txn_manager_.abort_transaction(tx);
+                    mvcc_manager_->get_transaction_manager().abort_transaction(tx);
                     mvcc_manager_->get_lock_manager().unlock_all(tx->id);
                     return util::unexpected<storage::Error>(match_result.error());
                 }
@@ -49,7 +50,7 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
             if (query.where.has_value()) {
                 auto where_result = apply_where(query.where.value(), result_set, ctx);
                 if (!where_result.has_value()) {
-                    txn_manager_.abort_transaction(tx);
+                    mvcc_manager_->get_transaction_manager().abort_transaction(tx);
                     mvcc_manager_->get_lock_manager().unlock_all(tx->id);
                     return util::unexpected<storage::Error>(where_result.error());
                 }
@@ -59,7 +60,7 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
             if (query.return_clause.has_value()) {
                 auto return_result = execute_return(query.return_clause.value(), result_set, ctx);
                 if (!return_result.has_value()) {
-                    txn_manager_.abort_transaction(tx);
+                    mvcc_manager_->get_transaction_manager().abort_transaction(tx);
                     mvcc_manager_->get_lock_manager().unlock_all(tx->id);
                     return util::unexpected<storage::Error>(return_result.error());
                 }
@@ -69,7 +70,7 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
                 if (query.order_by.has_value()) {
                     auto order_result = apply_order_by(final_result, query.order_by.value());
                     if (!order_result.has_value()) {
-                        txn_manager_.abort_transaction(tx);
+                        mvcc_manager_->get_transaction_manager().abort_transaction(tx);
                         mvcc_manager_->get_lock_manager().unlock_all(tx->id);
                         return util::unexpected<storage::Error>(order_result.error());
                     }
@@ -79,14 +80,14 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
                 if (query.limit.has_value()) {
                     auto limit_result = apply_limit(final_result, query.limit.value());
                     if (!limit_result.has_value()) {
-                        txn_manager_.abort_transaction(tx);
+                        mvcc_manager_->get_transaction_manager().abort_transaction(tx);
                         mvcc_manager_->get_lock_manager().unlock_all(tx->id);
                         return util::unexpected<storage::Error>(limit_result.error());
                     }
                     final_result = std::move(limit_result.value());
                 }
                 
-                txn_manager_.commit_transaction(tx);
+                mvcc_manager_->get_transaction_manager().commit_transaction(tx);
                 mvcc_manager_->get_lock_manager().unlock_all(tx->id);
                 return final_result;
             }
@@ -95,17 +96,17 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
         if (query.create.has_value()) {
             auto create_result = execute_create(query.create.value(), ctx);
             if (!create_result.has_value()) {
-                txn_manager_.abort_transaction(tx);
+                mvcc_manager_->get_transaction_manager().abort_transaction(tx);
                 mvcc_manager_->get_lock_manager().unlock_all(tx->id);
                 return util::unexpected<storage::Error>(create_result.error());
             }
             
-            txn_manager_.commit_transaction(tx);
+            mvcc_manager_->get_transaction_manager().commit_transaction(tx);
             mvcc_manager_->get_lock_manager().unlock_all(tx->id);
             return create_result.value();
         }
         
-        txn_manager_.abort_transaction(tx);
+        mvcc_manager_->get_transaction_manager().abort_transaction(tx);
         mvcc_manager_->get_lock_manager().unlock_all(tx->id);
         return util::unexpected<storage::Error>(storage::Error{
             storage::ErrorCode::INVALID_ARGUMENT, 
@@ -113,7 +114,7 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_query(const 
         });
         
     } catch (const std::exception& e) {
-        txn_manager_.abort_transaction(tx);
+        mvcc_manager_->get_transaction_manager().abort_transaction(tx);
         mvcc_manager_->get_lock_manager().unlock_all(tx->id);
         return util::unexpected<storage::Error>(storage::Error{
             storage::ErrorCode::INVALID_ARGUMENT, 
@@ -214,13 +215,13 @@ util::expected<ResultSet, storage::Error> CypherExecutor::match_variable_length_
             std::vector<storage::NodeId> current_path = queue.front();
             queue.pop();
 
-            if (current_path.size() > static_cast<size_t>(max_hops)) {
+            if (current_path.size() - 1 > static_cast<size_t>(max_hops)) {
                 continue;
             }
 
             storage::NodeId last_node_id = current_path.back();
 
-            if (current_path.size() >= static_cast<size_t>(edge.min_hops)) {
+            if (current_path.size() - 1 >= static_cast<size_t>(edge.min_hops)) {
                 if (matches_node_pattern(to_node, last_node_id, ctx)) {
                     ResultRow row;
                     if (from_node.variable.has_value()) {
@@ -231,11 +232,12 @@ util::expected<ResultSet, storage::Error> CypherExecutor::match_variable_length_
                     }
                     // Note: path variable binding not implemented
                     result_set.push_back(std::move(row));
+
                 }
             }
 
             // Expand to neighbors
-            if (current_path.size() < static_cast<size_t>(max_hops)) {
+            if (current_path.size() - 1 < static_cast<size_t>(max_hops)) {
                 auto edge_ids_result = find_edges_by_pattern(edge, last_node_id, 0, ctx);
                 if (edge_ids_result.has_value()) {
                     for (auto edge_id : edge_ids_result.value()) {
@@ -288,7 +290,9 @@ util::expected<std::vector<storage::NodeId>, storage::Error> CypherExecutor::fin
     std::vector<storage::NodeId> result;
     
     if (!node.properties.empty()) {
-        for (storage::NodeId node_id = 1; node_id <= 1000; ++node_id) {
+        // Search for nodes with specific properties
+        size_t node_count = ctx.graph_store->get_node_count();
+        for (storage::NodeId node_id = 1; node_id <= node_count + 10; ++node_id) {
             if (ctx.graph_store->has_mvcc()) {
                 auto node_result = ctx.graph_store->get_node(ctx.tx_id, node_id);
                 if (node_result.has_value()) {
@@ -308,13 +312,19 @@ util::expected<std::vector<storage::NodeId>, storage::Error> CypherExecutor::fin
             }
         }
     } else {
-        for (storage::NodeId node_id = 1; node_id <= 100; ++node_id) {
+        // Get all nodes by checking based on node count
+        // This is inefficient but works for now - better solution would be to add
+        // a get_all_node_ids() method to GraphStore
+                size_t node_count = ctx.graph_store->get_node_count();
+        for (storage::NodeId node_id = 1; node_id <= node_count + 10; ++node_id) {
             if (ctx.graph_store->has_mvcc()) {
-                if (ctx.graph_store->get_node(ctx.tx_id, node_id).has_value()) {
+                auto node_result = ctx.graph_store->get_node(ctx.tx_id, node_id);
+                if (node_result.has_value()) {
                     result.push_back(node_id);
                 }
             } else {
-                if (ctx.graph_store->get_node(node_id).has_value()) {
+                auto node_result = ctx.graph_store->get_node(node_id);
+                if (node_result.has_value()) {
                     result.push_back(node_id);
                 }
             }
@@ -454,14 +464,20 @@ util::expected<std::vector<storage::EdgeId>, storage::Error> CypherExecutor::fin
                                                                                                    ExecutionContext& ctx) {
     std::vector<storage::EdgeId> result;
     
-    // Get outgoing edges from the source node
-    auto outgoing_edges = ctx.index_manager->get_outgoing_edges(from_node);
-    result.insert(result.end(), outgoing_edges.begin(), outgoing_edges.end());
+    // Get outgoing edges from the source node using GraphStore directly
+    auto outgoing_edges_result = ctx.graph_store->get_outgoing_edges(from_node);
+    if (outgoing_edges_result.has_value()) {
+        auto outgoing_edges = outgoing_edges_result.value();
+        result.insert(result.end(), outgoing_edges.begin(), outgoing_edges.end());
+    }
 
     // If the edge is undirected, also get incoming edges
     if (!edge.directed) {
-        auto incoming_edges = ctx.index_manager->get_incoming_edges(from_node);
-        result.insert(result.end(), incoming_edges.begin(), incoming_edges.end());
+        auto incoming_edges_result = ctx.graph_store->get_incoming_edges(from_node);
+        if (incoming_edges_result.has_value()) {
+            auto incoming_edges = incoming_edges_result.value();
+            result.insert(result.end(), incoming_edges.begin(), incoming_edges.end());
+        }
     }
     
     std::vector<storage::EdgeId> filtered_result;
@@ -541,16 +557,19 @@ util::expected<ResultSet, storage::Error> CypherExecutor::apply_where(const Wher
                                                                      ExecutionContext& ctx) {
     ResultSet result_set;
     
+
     for (const auto& row : input) {
         auto condition_result = evaluate_boolean_expression(*where_clause.condition, row.bindings, ctx);
         if (!condition_result.has_value()) {
             return util::unexpected<storage::Error>(condition_result.error());
         }
         
+
         if (condition_result.value()) {
             result_set.push_back(row);
         }
     }
+
     
     return result_set;
 }
@@ -565,7 +584,23 @@ util::expected<QueryResult, storage::Error> CypherExecutor::execute_return(const
         if (item.alias.has_value()) {
             columns.push_back(item.alias.value());
         } else {
-            columns.push_back("column_" + std::to_string(columns.size()));
+            // Generate a human-readable column name from the expression
+            const auto& expr = *item.expression;
+            switch (expr.type()) {
+                case ExpressionType::PROPERTY_ACCESS: {
+                    const auto& pa = std::get<PropertyAccess>(expr.content);
+                    columns.push_back(pa.entity + "." + pa.property);
+                    break;
+                }
+                case ExpressionType::IDENTIFIER: {
+                    const auto& id = std::get<Identifier>(expr.content);
+                    columns.push_back(id.name);
+                    break;
+                }
+                default:
+                    columns.push_back("column_" + std::to_string(columns.size()));
+                    break;
+            }
         }
     }
     
@@ -675,9 +710,60 @@ util::expected<QueryResult, storage::Error> CypherExecutor::apply_limit(const Qu
 }
 
 util::expected<QueryResult, storage::Error> CypherExecutor::apply_order_by(const QueryResult& result, 
-                                                                          const OrderByClause& /*order_by*/) {
-    // TODO: Implement proper ordering
-    return result;
+                                                                          const OrderByClause& order_by) {
+    if (order_by.items.empty()) {
+        return result;
+    }
+    
+    QueryResult sorted_result = result;
+    
+    // Sort the rows based on the order by items
+    std::sort(sorted_result.rows.begin(), sorted_result.rows.end(), 
+        [&](const std::vector<std::string>& row1, const std::vector<std::string>& row2) {
+            for (const auto& item : order_by.items) {
+                // For now, assume the order by expression is a simple column reference
+                // In the future, we'd need to evaluate the expression against each row
+                
+                // Get the column name from the expression
+                std::string column_name;
+                if (item.expression->type() == ExpressionType::PROPERTY_ACCESS) {
+                    const auto& prop_access = std::get<PropertyAccess>(item.expression->content);
+                    column_name = prop_access.entity + "." + prop_access.property;
+                } else if (item.expression->type() == ExpressionType::IDENTIFIER) {
+                    const auto& identifier = std::get<Identifier>(item.expression->content);
+                    column_name = identifier.name;
+                }
+                
+                // Find the column index
+                auto col_it = std::find(result.columns.begin(), result.columns.end(), column_name);
+                if (col_it == result.columns.end()) {
+                    continue; // Column not found, skip this sort key
+                }
+                
+                size_t col_index = std::distance(result.columns.begin(), col_it);
+                if (col_index >= row1.size() || col_index >= row2.size()) {
+                    continue; // Invalid column index
+                }
+                
+                const std::string& val1 = row1[col_index];
+                const std::string& val2 = row2[col_index];
+                
+                int comparison = val1.compare(val2);
+                if (comparison != 0) {
+                    if (item.direction == OrderDirection::ASC) {
+                        return comparison < 0;
+                    } else {
+                        return comparison > 0;
+                    }
+                }
+                
+                // Values are equal, continue to next sort key
+            }
+            
+            return false; // All sort keys are equal
+        });
+    
+    return sorted_result;
 }
 
 } 

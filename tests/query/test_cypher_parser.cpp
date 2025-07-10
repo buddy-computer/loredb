@@ -108,14 +108,17 @@ TEST_F(CypherParserTest, ParseCreateQuery) {
 }
 
 TEST_F(CypherParserTest, ExecuteSimpleNodeQuery) {
-    // First create some test data
+    // First create some test data using MVCC-aware creation
     std::vector<storage::Property> properties = {
         storage::Property("name", storage::PropertyValue(std::string("Alice"))),
         storage::Property("age", storage::PropertyValue(int64_t(25)))
     };
     
-    auto node_result = graph_store_->create_node(properties);
+    // Create the node within a transaction so MVCC queries can see it
+    auto tx = txn_manager_->begin_transaction();
+    auto node_result = graph_store_->create_node(tx->id, properties);
     ASSERT_TRUE(node_result.has_value()) << "Failed to create node: " << node_result.error().message;
+    txn_manager_->commit_transaction(tx);
     
     // Execute a query to find the node
     std::string query = "MATCH (n) RETURN n";
@@ -129,7 +132,7 @@ TEST_F(CypherParserTest, ExecuteSimpleNodeQuery) {
 }
 
 TEST_F(CypherParserTest, ExecuteNodeWithPropertiesQuery) {
-    // Create test data
+    // Create test data using MVCC-aware transactions
     std::vector<storage::Property> alice_props = {
         storage::Property("name", storage::PropertyValue(std::string("Alice"))),
         storage::Property("age", storage::PropertyValue(int64_t(25)))
@@ -139,10 +142,12 @@ TEST_F(CypherParserTest, ExecuteNodeWithPropertiesQuery) {
         storage::Property("age", storage::PropertyValue(int64_t(30)))
     };
     
-    auto alice_result = graph_store_->create_node(alice_props);
-    auto bob_result = graph_store_->create_node(bob_props);
+    auto tx = txn_manager_->begin_transaction();
+    auto alice_result = graph_store_->create_node(tx->id, alice_props);
+    auto bob_result = graph_store_->create_node(tx->id, bob_props);
     ASSERT_TRUE(alice_result.has_value());
     ASSERT_TRUE(bob_result.has_value());
+    txn_manager_->commit_transaction(tx);
     
     // Query for Alice specifically
     std::string query = "MATCH (n {name: \"Alice\"}) RETURN n";
@@ -155,7 +160,7 @@ TEST_F(CypherParserTest, ExecuteNodeWithPropertiesQuery) {
 }
 
 TEST_F(CypherParserTest, ExecuteEdgePatternQuery) {
-    // Create test data: Alice knows Bob
+    // Create test data: Alice knows Bob using MVCC-aware transactions
     std::vector<storage::Property> alice_props = {
         storage::Property("name", storage::PropertyValue(std::string("Alice")))
     };
@@ -167,16 +172,18 @@ TEST_F(CypherParserTest, ExecuteEdgePatternQuery) {
         storage::Property("since", storage::PropertyValue(int64_t(2020)))
     };
     
-    auto alice_result = graph_store_->create_node(alice_props);
-    auto bob_result = graph_store_->create_node(bob_props);
+    auto tx = txn_manager_->begin_transaction();
+    auto alice_result = graph_store_->create_node(tx->id, alice_props);
+    auto bob_result = graph_store_->create_node(tx->id, bob_props);
     ASSERT_TRUE(alice_result.has_value());
     ASSERT_TRUE(bob_result.has_value());
     
     auto alice_id = alice_result.value();
     auto bob_id = bob_result.value();
     
-    auto edge_result = graph_store_->create_edge(alice_id, bob_id, "KNOWS", edge_props);
+    auto edge_result = graph_store_->create_edge(tx->id, alice_id, bob_id, "KNOWS", edge_props);
     ASSERT_TRUE(edge_result.has_value()) << "Failed to create edge: " << edge_result.error().message;
+    txn_manager_->commit_transaction(tx);
     
     // Query for the relationship pattern
     std::string query = "MATCH (a)-[r]->(b) RETURN a, r, b";
@@ -190,7 +197,7 @@ TEST_F(CypherParserTest, ExecuteEdgePatternQuery) {
 }
 
 TEST_F(CypherParserTest, ExecuteWhereClause) {
-    // Create test data
+    // Create test data using MVCC transactions
     std::vector<storage::Property> alice_props = {
         storage::Property("name", storage::PropertyValue(std::string("Alice"))),
         storage::Property("age", storage::PropertyValue(int64_t(25)))
@@ -200,10 +207,12 @@ TEST_F(CypherParserTest, ExecuteWhereClause) {
         storage::Property("age", storage::PropertyValue(int64_t(30)))
     };
     
-    auto alice_result = graph_store_->create_node(alice_props);
-    auto bob_result = graph_store_->create_node(bob_props);
+    auto tx = txn_manager_->begin_transaction();
+    auto alice_result = graph_store_->create_node(tx->id, alice_props);
+    auto bob_result = graph_store_->create_node(tx->id, bob_props);
     ASSERT_TRUE(alice_result.has_value());
     ASSERT_TRUE(bob_result.has_value());
+    txn_manager_->commit_transaction(tx);
     
     // Query with WHERE clause
     std::string query = "MATCH (n) WHERE n.age > 27 RETURN n.name";
@@ -245,19 +254,21 @@ TEST_F(CypherParserTest, ParseErrorHandling) {
 }
 
 TEST_F(CypherParserTest, ExecuteComplexEdgePattern) {
-    // Create a more complex graph: Alice knows Bob, Bob knows Charlie
+    // Create a more complex graph: Alice knows Bob, Bob knows Charlie using MVCC transactions
     std::vector<storage::Property> alice_props = {storage::Property("name", storage::PropertyValue(std::string("Alice")))};
     std::vector<storage::Property> bob_props = {storage::Property("name", storage::PropertyValue(std::string("Bob")))};
     std::vector<storage::Property> charlie_props = {storage::Property("name", storage::PropertyValue(std::string("Charlie")))};
     
-    auto alice_id = graph_store_->create_node(alice_props).value();
-    auto bob_id = graph_store_->create_node(bob_props).value();
-    auto charlie_id = graph_store_->create_node(charlie_props).value();
+    auto tx = txn_manager_->begin_transaction();
+    auto alice_id = graph_store_->create_node(tx->id, alice_props).value();
+    auto bob_id = graph_store_->create_node(tx->id, bob_props).value();
+    auto charlie_id = graph_store_->create_node(tx->id, charlie_props).value();
     
     std::vector<storage::Property> knows_props = {storage::Property("type", storage::PropertyValue(std::string("KNOWS")))};
     
-    graph_store_->create_edge(alice_id, bob_id, "KNOWS", knows_props);
-    graph_store_->create_edge(bob_id, charlie_id, "KNOWS", knows_props);
+    graph_store_->create_edge(tx->id, alice_id, bob_id, "KNOWS", knows_props);
+    graph_store_->create_edge(tx->id, bob_id, charlie_id, "KNOWS", knows_props);
+    txn_manager_->commit_transaction(tx);
     
     // Query for specific edge pattern with property constraints
     std::string query = "MATCH (a {name: \"Alice\"})-[r]->(b) RETURN a.name, b.name";
@@ -271,19 +282,21 @@ TEST_F(CypherParserTest, ExecuteComplexEdgePattern) {
 }
 
 TEST_F(CypherParserTest, ExecuteMultiHopQuery) {
-    // Create a chain: Alice -> Bob -> Charlie
+    // Create a chain: Alice -> Bob -> Charlie using MVCC transactions
     std::vector<storage::Property> alice_props = {storage::Property("name", storage::PropertyValue(std::string("Alice")))};
     std::vector<storage::Property> bob_props = {storage::Property("name", storage::PropertyValue(std::string("Bob")))};
     std::vector<storage::Property> charlie_props = {storage::Property("name", storage::PropertyValue(std::string("Charlie")))};
     
-    auto alice_id = graph_store_->create_node(alice_props).value();
-    auto bob_id = graph_store_->create_node(bob_props).value();
-    auto charlie_id = graph_store_->create_node(charlie_props).value();
+    auto tx = txn_manager_->begin_transaction();
+    auto alice_id = graph_store_->create_node(tx->id, alice_props).value();
+    auto bob_id = graph_store_->create_node(tx->id, bob_props).value();
+    auto charlie_id = graph_store_->create_node(tx->id, charlie_props).value();
     
     std::vector<storage::Property> knows_props = {storage::Property("type", storage::PropertyValue(std::string("KNOWS")))};
     
-    graph_store_->create_edge(alice_id, bob_id, "KNOWS", knows_props);
-    graph_store_->create_edge(bob_id, charlie_id, "KNOWS", knows_props);
+    graph_store_->create_edge(tx->id, alice_id, bob_id, "KNOWS", knows_props);
+    graph_store_->create_edge(tx->id, bob_id, charlie_id, "KNOWS", knows_props);
+    txn_manager_->commit_transaction(tx);
 
     // Query for the 2-hop path
     std::string query = "MATCH (a {name: \"Alice\"})-[r1]->(b)-[r2]->(c) RETURN a.name, b.name, c.name";
@@ -302,15 +315,17 @@ TEST_F(CypherParserTest, ExecuteMultiHopQuery) {
 }
 
 TEST_F(CypherParserTest, ExecuteUndirectedQuery) {
-    // Create a directed edge: Alice -> Bob
+    // Create a directed edge: Alice -> Bob using MVCC transactions
     std::vector<storage::Property> alice_props = {storage::Property("name", storage::PropertyValue(std::string("Alice")))};
     std::vector<storage::Property> bob_props = {storage::Property("name", storage::PropertyValue(std::string("Bob")))};
     
-    auto alice_id = graph_store_->create_node(alice_props).value();
-    auto bob_id = graph_store_->create_node(bob_props).value();
+    auto tx = txn_manager_->begin_transaction();
+    auto alice_id = graph_store_->create_node(tx->id, alice_props).value();
+    auto bob_id = graph_store_->create_node(tx->id, bob_props).value();
     
     std::vector<storage::Property> knows_props = {storage::Property("type", storage::PropertyValue(std::string("KNOWS")))};
-    graph_store_->create_edge(alice_id, bob_id, "KNOWS", knows_props);
+    graph_store_->create_edge(tx->id, alice_id, bob_id, "KNOWS", knows_props);
+    txn_manager_->commit_transaction(tx);
 
     // Query with an undirected edge, it should find the directed edge
     std::string query = "MATCH (a {name: \"Alice\"})--(b) RETURN a.name, b.name";
@@ -327,10 +342,12 @@ TEST_F(CypherParserTest, ExecuteUndirectedQuery) {
 }
 
 TEST_F(CypherParserTest, ExecuteLimitQuery) {
-    // Create some nodes
-    graph_store_->create_node({});
-    graph_store_->create_node({});
-    graph_store_->create_node({});
+    // Create some nodes using MVCC transactions
+    auto tx = txn_manager_->begin_transaction();
+    graph_store_->create_node(tx->id, {});
+    graph_store_->create_node(tx->id, {});
+    graph_store_->create_node(tx->id, {});
+    txn_manager_->commit_transaction(tx);
 
     // Query with LIMIT
     std::string query = "MATCH (n) RETURN n LIMIT 2";
@@ -343,10 +360,12 @@ TEST_F(CypherParserTest, ExecuteLimitQuery) {
 }
 
 TEST_F(CypherParserTest, ExecuteOrderByQuery) {
-    // Create some nodes with names for ordering
-    graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Charlie")))});
-    graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Alice")))});
-    graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Bob")))});
+    // Create some nodes with names for ordering using MVCC transactions
+    auto tx = txn_manager_->begin_transaction();
+    graph_store_->create_node(tx->id, {storage::Property("name", storage::PropertyValue(std::string("Charlie")))});
+    graph_store_->create_node(tx->id, {storage::Property("name", storage::PropertyValue(std::string("Alice")))});
+    graph_store_->create_node(tx->id, {storage::Property("name", storage::PropertyValue(std::string("Bob")))});
+    txn_manager_->commit_transaction(tx);
 
     // Query with ORDER BY
     std::string query = "MATCH (n) RETURN n.name ORDER BY n.name";
@@ -426,15 +445,17 @@ TEST_F(CypherParserTest, ParseErrorHandlingInvalidKeyword) {
 }
 
 TEST_F(CypherParserTest, ExecuteVariableLengthQuery) {
-    // Create a chain: Alice -> Bob -> Charlie -> David
-    auto alice_id = graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Alice")))}) .value();
-    auto bob_id = graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Bob")))}) .value();
-    auto charlie_id = graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("Charlie")))}) .value();
-    auto david_id = graph_store_->create_node({storage::Property("name", storage::PropertyValue(std::string("David")))}) .value();
+    // Create a chain: Alice -> Bob -> Charlie -> David using MVCC transactions
+    auto tx = txn_manager_->begin_transaction();
+    auto alice_id = graph_store_->create_node(tx->id, {storage::Property("name", storage::PropertyValue(std::string("Alice")))}) .value();
+    auto bob_id = graph_store_->create_node(tx->id, {storage::Property("name", storage::PropertyValue(std::string("Bob")))}) .value();
+    auto charlie_id = graph_store_->create_node(tx->id, {storage::Property("name", storage::PropertyValue(std::string("Charlie")))}) .value();
+    auto david_id = graph_store_->create_node(tx->id, {storage::Property("name", storage::PropertyValue(std::string("David")))}) .value();
     
-    graph_store_->create_edge(alice_id, bob_id, "KNOWS", {});
-    graph_store_->create_edge(bob_id, charlie_id, "KNOWS", {});
-    graph_store_->create_edge(charlie_id, david_id, "KNOWS", {});
+    graph_store_->create_edge(tx->id, alice_id, bob_id, "KNOWS", {});
+    graph_store_->create_edge(tx->id, bob_id, charlie_id, "KNOWS", {});
+    graph_store_->create_edge(tx->id, charlie_id, david_id, "KNOWS", {});
+    txn_manager_->commit_transaction(tx);
 
     // Query for paths of length 1 to 3
     std::string query = "MATCH (a {name: \"Alice\"})-[*1..3]->(b) RETURN b.name";
