@@ -25,10 +25,6 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     # GCC-specific: disable false positive stringop-overflow warnings with fmt library
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         add_compile_options(-Wno-stringop-overflow)
-        if (CLANG_TIDY_EXE)
-            set(CMAKE_CXX_CLANG_TIDY
-                "${CLANG_TIDY_EXE};-config=;--extra-arg=-Wno-stringop-overflow") # remove or override
-        endif()
     endif()
     
     if (ENABLE_WERROR)
@@ -44,9 +40,14 @@ endif()
 # === Static analysis ===
 if (ENABLE_STATIC_ANALYSIS)
     find_program(CLANG_TIDY_EXE NAMES clang-tidy)
-    if (CLANG_TIDY_EXE)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
-        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+        if (CLANG_TIDY_EXE)
+            set(CMAKE_CXX_CLANG_TIDY
+                "${CLANG_TIDY_EXE};-config=;--extra-arg=-Wno-stringop-overflow") # remove or override
+        else()
+            set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+        endif()
     endif()
 
     find_program(CPPCHECK_EXE NAMES cppcheck)
