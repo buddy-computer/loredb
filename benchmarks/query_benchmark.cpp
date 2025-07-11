@@ -18,9 +18,13 @@ public:
         std::string db_path = "/tmp/loredb_query_benchmark_" + std::to_string(getpid()) + ".db";
         
         auto page_store = std::make_unique<FilePageStore>(db_path);
-        graph_store_ = std::make_shared<GraphStore>(std::move(page_store));
-        index_manager_ = std::make_shared<SimpleIndexManager>();
-        query_executor_ = std::make_unique<QueryExecutor>(graph_store_, index_manager_);
+        graph_store_ = std::make_unique<GraphStore>(std::move(page_store));
+        index_manager_ = std::make_unique<SimpleIndexManager>();
+
+        auto gs_shared = std::shared_ptr<GraphStore>(graph_store_.get(), [](GraphStore*){});
+        auto idx_shared = std::shared_ptr<SimpleIndexManager>(index_manager_.get(), [](SimpleIndexManager*){});
+
+        query_executor_ = std::make_unique<QueryExecutor>(gs_shared, idx_shared);
         
         // Initialize random number generator
         rng_.seed(42);
@@ -31,8 +35,8 @@ public:
     
     void TearDown(const benchmark::State& state) override {
         query_executor_.reset();
-        index_manager_.reset();
         graph_store_.reset();
+        index_manager_.reset();
         
         // Clean up temporary file
         std::string db_path = "/tmp/loredb_query_benchmark_" + std::to_string(getpid()) + ".db";
@@ -94,8 +98,8 @@ public:
     }
 
 protected:
-    std::shared_ptr<GraphStore> graph_store_;
-    std::shared_ptr<SimpleIndexManager> index_manager_;
+    std::unique_ptr<GraphStore> graph_store_;
+    std::unique_ptr<SimpleIndexManager> index_manager_;
     std::unique_ptr<QueryExecutor> query_executor_;
     std::mt19937 rng_;
     std::vector<NodeId> document_ids_;
