@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1752252651848,
+  "lastUpdate": 1752252704999,
   "repoUrl": "https://github.com/buddy-computer/loredb",
   "entries": {
     "Benchmark": [
@@ -880,6 +880,450 @@ window.BENCHMARK_DATA = {
             "value": 4307.4245200000405,
             "unit": "ns/iter",
             "extra": "iterations: 100000\ncpu: 4306.855129999861 ns\nthreads: 1"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "overra@gmail.com",
+            "name": "Adam Snodgrass",
+            "username": "overra"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cbc6c8e19cbbe92efce12146b5659bca3d6cbe1d",
+          "message": "Merge pull request #4 from buddy-computer/perf-action\n\nEnhance README and add Continuous Benchmarking workflow",
+          "timestamp": "2025-07-11T11:45:56-05:00",
+          "tree_id": "7de17bf971bf8298f8717335abc155be5a468593",
+          "url": "https://github.com/buddy-computer/loredb/commit/cbc6c8e19cbbe92efce12146b5659bca3d6cbe1d"
+        },
+        "date": 1752252704700,
+        "tool": "googlecpp",
+        "benches": [
+          {
+            "name": "QueryBenchmarkFixture/GetNodeById",
+            "value": 2866.0120058275847,
+            "unit": "ns/iter",
+            "extra": "iterations: 242299\ncpu: 2865.6089996244314 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/GetEdgeById",
+            "value": 0,
+            "unit": "ns/iter",
+            "extra": "iterations: 100000\ncpu: 0 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/GetNodesByProperty",
+            "value": 281393.0229468612,
+            "unit": "ns/iter",
+            "extra": "iterations: 2484\ncpu: 281379.08132045076 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/GetEdgesByProperty",
+            "value": 12736778.071428541,
+            "unit": "ns/iter",
+            "extra": "iterations: 56\ncpu: 12735152.42857142 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/GetAdjacentNodes",
+            "value": 18831.257564979387,
+            "unit": "ns/iter",
+            "extra": "iterations: 36550\ncpu: 18827.62845417238 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/GetOutgoingEdges",
+            "value": 355.9046283746663,
+            "unit": "ns/iter",
+            "extra": "iterations: 1927156\ncpu: 355.61504102418286 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/GetIncomingEdges",
+            "value": 353.1696860211273,
+            "unit": "ns/iter",
+            "extra": "iterations: 2001090\ncpu: 353.11917504959786 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/FindShortestPath",
+            "value": 1991658.277777798,
+            "unit": "ns/iter",
+            "extra": "iterations: 396\ncpu: 1991425.881313131 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/FindPathsWithLength",
+            "value": 24096537.030302584,
+            "unit": "ns/iter",
+            "extra": "iterations: 33\ncpu: 24094326.333333366 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/GetDocumentBacklinks",
+            "value": 353.1099571614065,
+            "unit": "ns/iter",
+            "extra": "iterations: 1956180\ncpu: 353.10229937940295 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/GetDocumentOutlinks",
+            "value": 355.3373674073751,
+            "unit": "ns/iter",
+            "extra": "iterations: 1982859\ncpu: 355.3332178435282 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/FindRelatedDocuments",
+            "value": 19544.500359572234,
+            "unit": "ns/iter",
+            "extra": "iterations: 36154\ncpu: 19542.737954306565 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/SuggestLinksForDocument",
+            "value": 20085.876313084882,
+            "unit": "ns/iter",
+            "extra": "iterations: 35032\ncpu: 20084.11209751092 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/BatchGetNodes",
+            "value": 27871.376879211923,
+            "unit": "ns/iter",
+            "extra": "iterations: 25077\ncpu: 27869.728954819133 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/BatchGetEdges",
+            "value": 24551.111111111615,
+            "unit": "ns/iter",
+            "extra": "iterations: 28089\ncpu: 24547.046957883784 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/CountNodes",
+            "value": 85.70644798844239,
+            "unit": "ns/iter",
+            "extra": "iterations: 8010979\ncpu: 85.69722726772841 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/CountEdges",
+            "value": 90.55739500006038,
+            "unit": "ns/iter",
+            "extra": "iterations: 7649290\ncpu: 90.55058574063706 ns\nthreads: 1"
+          },
+          {
+            "name": "QueryBenchmarkFixture/GetNodeDegreeStats",
+            "value": 161.26355236691623,
+            "unit": "ns/iter",
+            "extra": "iterations: 4336641\ncpu: 161.25747738860557 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeCreation/1",
+            "value": 18455.23263198662,
+            "unit": "ns/iter",
+            "extra": "iterations: 38735\ncpu: 18453.33119917389 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeCreation/8",
+            "value": 18517.550759062335,
+            "unit": "ns/iter",
+            "extra": "iterations: 38732\ncpu: 18516.56503666224 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeCreation/64",
+            "value": 18468.834784405517,
+            "unit": "ns/iter",
+            "extra": "iterations: 38707\ncpu: 18467.09646833902 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeCreation/512",
+            "value": 18468.385238477324,
+            "unit": "ns/iter",
+            "extra": "iterations: 38641\ncpu: 18467.288967676737 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeCreation/4096",
+            "value": 18443.13096960961,
+            "unit": "ns/iter",
+            "extra": "iterations: 38696\ncpu: 18440.703871201113 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeCreation/32768",
+            "value": 18478.966883653196,
+            "unit": "ns/iter",
+            "extra": "iterations: 38712\ncpu: 18477.866862988158 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeCreation/262144",
+            "value": 18446.864690290444,
+            "unit": "ns/iter",
+            "extra": "iterations: 38859\ncpu: 18444.233716770792 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeCreation/1000000",
+            "value": 18462.395271745918,
+            "unit": "ns/iter",
+            "extra": "iterations: 38915\ncpu: 18460.95256327888 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/BatchNodeCreation/10",
+            "value": 184601.30054361935,
+            "unit": "ns/iter",
+            "extra": "iterations: 3863\ncpu: 184572.4307533016 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/BatchNodeCreation/64",
+            "value": 1188140.5321252306,
+            "unit": "ns/iter",
+            "extra": "iterations: 607\ncpu: 1188023.2075782518 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/BatchNodeCreation/512",
+            "value": 9545233.200000212,
+            "unit": "ns/iter",
+            "extra": "iterations: 75\ncpu: 9544548.440000067 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/BatchNodeCreation/4096",
+            "value": 76582345.88888983,
+            "unit": "ns/iter",
+            "extra": "iterations: 9\ncpu: 76575897.6666662 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/BatchNodeCreation/10000",
+            "value": 187337162.24999598,
+            "unit": "ns/iter",
+            "extra": "iterations: 4\ncpu: 187320490.99999946 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeCreation/1",
+            "value": 18586.10706626727,
+            "unit": "ns/iter",
+            "extra": "iterations: 37771\ncpu: 18584.898440602432 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeCreation/8",
+            "value": 18596.000948416622,
+            "unit": "ns/iter",
+            "extra": "iterations: 37958\ncpu: 18594.558380315197 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeCreation/64",
+            "value": 18589.395527089568,
+            "unit": "ns/iter",
+            "extra": "iterations: 38096\ncpu: 18587.710179546306 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeCreation/512",
+            "value": 18659.734252228398,
+            "unit": "ns/iter",
+            "extra": "iterations: 37799\ncpu: 18657.513690838467 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeCreation/4096",
+            "value": 18652.08908827017,
+            "unit": "ns/iter",
+            "extra": "iterations: 37895\ncpu: 18650.26367594655 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeCreation/32768",
+            "value": 18678.778449117275,
+            "unit": "ns/iter",
+            "extra": "iterations: 37901\ncpu: 18676.13648716404 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeCreation/262144",
+            "value": 18607.019858118427,
+            "unit": "ns/iter",
+            "extra": "iterations: 37919\ncpu: 18605.56507291851 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeCreation/1000000",
+            "value": 18634.54906609788,
+            "unit": "ns/iter",
+            "extra": "iterations: 37959\ncpu: 18631.90358017861 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeLookup/1000",
+            "value": 1940.4151100532083,
+            "unit": "ns/iter",
+            "extra": "iterations: 363824\ncpu: 1940.2371531289727 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeLookup/4096",
+            "value": 2002.6816119154632,
+            "unit": "ns/iter",
+            "extra": "iterations: 353691\ncpu: 2002.5489650570612 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeLookup/32768",
+            "value": 2542.080967205853,
+            "unit": "ns/iter",
+            "extra": "iterations: 261785\ncpu: 2541.6624825715644 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/NodeLookup/100000",
+            "value": 2632.7313098589407,
+            "unit": "ns/iter",
+            "extra": "iterations: 275961\ncpu: 2632.5474179322227 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeLookup/1000",
+            "value": 1768.1384971721866,
+            "unit": "ns/iter",
+            "extra": "iterations: 400658\ncpu: 1767.981632714178 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeLookup/4096",
+            "value": 1836.797979508765,
+            "unit": "ns/iter",
+            "extra": "iterations: 384164\ncpu: 1836.6577841755188 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeLookup/32768",
+            "value": 2365.1596153517526,
+            "unit": "ns/iter",
+            "extra": "iterations: 292735\ncpu: 2364.926459084156 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/EdgeLookup/100000",
+            "value": 2339.8111162274527,
+            "unit": "ns/iter",
+            "extra": "iterations: 293175\ncpu: 2339.5627492112285 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PropertyIndexCreation/1000",
+            "value": 677.7976409646988,
+            "unit": "ns/iter",
+            "extra": "iterations: 1018724\ncpu: 682.7909325814267 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PropertyIndexCreation/4096",
+            "value": 678.5968402084261,
+            "unit": "ns/iter",
+            "extra": "iterations: 1014057\ncpu: 683.7139164763782 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PropertyIndexCreation/32768",
+            "value": 681.8509028607583,
+            "unit": "ns/iter",
+            "extra": "iterations: 1011240\ncpu: 686.7715883576408 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PropertyIndexCreation/100000",
+            "value": 677.7503524699181,
+            "unit": "ns/iter",
+            "extra": "iterations: 1012215\ncpu: 682.9976339064777 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PropertyIndexLookup/1000",
+            "value": 735.9662796887144,
+            "unit": "ns/iter",
+            "extra": "iterations: 928046\ncpu: 735.9420459761699 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PropertyIndexLookup/4096",
+            "value": 2721.3111230792874,
+            "unit": "ns/iter",
+            "extra": "iterations: 256233\ncpu: 2721.180433433606 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PropertyIndexLookup/32768",
+            "value": 21307.53141529383,
+            "unit": "ns/iter",
+            "extra": "iterations: 32707\ncpu: 21306.514813343136 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PropertyIndexLookup/100000",
+            "value": 65858.58275408496,
+            "unit": "ns/iter",
+            "extra": "iterations: 10646\ncpu: 65847.4335900816 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/AdjacencyLookup/1000",
+            "value": 44819.47362015756,
+            "unit": "ns/iter",
+            "extra": "iterations: 13969\ncpu: 44812.53260791691 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/AdjacencyLookup/4096",
+            "value": 42920.75547445364,
+            "unit": "ns/iter",
+            "extra": "iterations: 15344\ncpu: 42915.91729666383 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/AdjacencyLookup/32768",
+            "value": 42938.47500619989,
+            "unit": "ns/iter",
+            "extra": "iterations: 16124\ncpu: 42934.007752417696 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/AdjacencyLookup/100000",
+            "value": 42419.375160598254,
+            "unit": "ns/iter",
+            "extra": "iterations: 16345\ncpu: 42414.58947690386 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/SimpleQuery/1000",
+            "value": 92.53971738005269,
+            "unit": "ns/iter",
+            "extra": "iterations: 7452128\ncpu: 92.53012361032724 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/SimpleQuery/4096",
+            "value": 93.44036092519708,
+            "unit": "ns/iter",
+            "extra": "iterations: 7506597\ncpu: 93.4345189970874 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/SimpleQuery/32768",
+            "value": 97.03442292183023,
+            "unit": "ns/iter",
+            "extra": "iterations: 7287063\ncpu: 97.03209894027287 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/SimpleQuery/100000",
+            "value": 101.8290877296435,
+            "unit": "ns/iter",
+            "extra": "iterations: 7033825\ncpu: 101.81924728010753 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PathFinding/1000",
+            "value": 2179450.5481727696,
+            "unit": "ns/iter",
+            "extra": "iterations: 301\ncpu: 2179364.368770775 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PathFinding/4096",
+            "value": 2126878.490384726,
+            "unit": "ns/iter",
+            "extra": "iterations: 312\ncpu: 2126580.509615322 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/PathFinding/10000",
+            "value": 2139816.421052537,
+            "unit": "ns/iter",
+            "extra": "iterations: 304\ncpu: 2139398.1151315477 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/DocumentBacklinks/1000",
+            "value": 343.5701860574977,
+            "unit": "ns/iter",
+            "extra": "iterations: 2033780\ncpu: 343.533245975473 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/DocumentBacklinks/4096",
+            "value": 346.7268980426993,
+            "unit": "ns/iter",
+            "extra": "iterations: 2026917\ncpu: 346.6869783025112 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/DocumentBacklinks/10000",
+            "value": 344.018586080565,
+            "unit": "ns/iter",
+            "extra": "iterations: 1974865\ncpu: 343.9797596291317 ns\nthreads: 1"
+          },
+          {
+            "name": "BenchmarkFixture/WikiWorkload/iterations:100000",
+            "value": 4203.124590000016,
+            "unit": "ns/iter",
+            "extra": "iterations: 100000\ncpu: 4203.061800000114 ns\nthreads: 1"
           }
         ]
       }
