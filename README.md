@@ -1,8 +1,7 @@
 # LoreDB
 
-[![Performance CI](https://github.com/buddy-computer/wiki-graph/workflows/Continuous%20Benchmarking/badge.svg)](https://github.com/buddy-computer/wiki-graph/actions/workflows/benchmark.yml)
-[![Benchmark Dashboard](https://img.shields.io/badge/Benchmark-Dashboard-blue)](https://buddy-computer.github.io/wiki-graph/dev/bench/)
-
+[![Performance CI](https://github.com/buddy-computer/loredb/workflows/Continuous%20Benchmarking/badge.svg)](https://github.com/buddy-computer/loredb/actions/workflows/benchmark.yml)
+[![Benchmark Dashboard](https://img.shields.io/badge/Benchmark-Dashboard-blue)](https://buddy-computer.github.io/loredb/dev/bench/)
 A modern, embeddable property graph database engine written in C++20, designed for high performance, extensibility, and robust concurrency.
 
 ## Architecture Overview
