@@ -1,4 +1,5 @@
 #include "mvcc.h"
+#include <mutex>  // for std::unique_lock
 
 namespace loredb::transaction {
 
