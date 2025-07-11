@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(loredb CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -82,7 +82,6 @@ find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 
 # vcpkg dependencies
-find_package(tl-expected CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
@@ -102,6 +101,7 @@ add_library(loredb STATIC
     src/storage/record.cpp
     src/storage/simple_index_manager.cpp
     src/query/executor.cpp
+    src/query/cypher/ast.cpp
     src/query/cypher/parser.cpp
     src/query/cypher/executor.cpp
     src/query/cypher/expression_evaluator.cpp
@@ -117,7 +117,6 @@ add_library(loredb STATIC
 )
 target_link_libraries(loredb
     Threads::Threads
-    tl::expected
     fmt::fmt
     spdlog::spdlog
     taocpp::pegtl

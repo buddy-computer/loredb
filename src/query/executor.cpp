@@ -3,9 +3,8 @@
 #include <unordered_set>
 #include <algorithm>
 #include <sstream>
-#include <fmt/core.h>
-#include <fmt/format.h>
-#include <fmt/ranges.h>
+#include <format>
+#include <ranges>
 
 namespace loredb::query {
 
@@ -372,9 +371,17 @@ QueryResult QueryExecutor::node_to_result(const storage::NodeRecord& node, const
     
     std::vector<std::string> prop_pairs;
     for (const auto& prop : properties) {
-        prop_pairs.push_back(fmt::format("{}:{}", prop.key, property_value_to_string(prop.value)));
+        prop_pairs.push_back(std::format("{}:{}", prop.key, property_value_to_string(prop.value)));
     }
-    std::string props_str = fmt::format("{}", fmt::join(prop_pairs, ", "));
+    
+    // Join property pairs with comma separation
+    std::string props_str;
+    if (!prop_pairs.empty()) {
+        props_str = prop_pairs[0];
+        for (size_t i = 1; i < prop_pairs.size(); ++i) {
+            props_str += ", " + prop_pairs[i];
+        }
+    }
     
     result.add_row({std::to_string(node.id), props_str});
     return result;

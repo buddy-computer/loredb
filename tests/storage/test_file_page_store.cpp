@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <numeric>
+#include <algorithm>
 
 using namespace loredb::storage;
 
