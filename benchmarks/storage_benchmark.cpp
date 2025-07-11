@@ -20,19 +20,22 @@ public:
         auto page_store = std::make_unique<FilePageStore>(db_path);
         graph_store_ = std::make_unique<GraphStore>(std::move(page_store));
         index_manager_ = std::make_unique<SimpleIndexManager>();
-        query_executor_ = std::make_unique<QueryExecutor>(
-            std::shared_ptr<GraphStore>(graph_store_.get()), 
-            std::shared_ptr<SimpleIndexManager>(index_manager_.get())
-        );
+
+        // Create non-owning shared_ptrs so QueryExecutor can use them
+        auto gs_shared = std::shared_ptr<GraphStore>(graph_store_.get(), [](GraphStore*){});
+        auto idx_shared = std::shared_ptr<SimpleIndexManager>(index_manager_.get(), [](SimpleIndexManager*){});
+
+        query_executor_ = std::make_unique<QueryExecutor>(gs_shared, idx_shared);
         
         // Initialize random number generator
         rng_.seed(42);
     }
     
     void TearDown(const benchmark::State& state) override {
+        // Destroy QueryExecutor first (non-owning), then owned objects
         query_executor_.reset();
-        index_manager_.reset();
         graph_store_.reset();
+        index_manager_.reset();
         
         // Clean up temporary file
         std::string db_path = "/tmp/loredb_benchmark_" + std::to_string(getpid()) + ".db";
