@@ -1,0 +1,84 @@
+name: Continuous Benchmarking
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          pkg-config \
+          git \
+          curl \
+          zip \
+          unzip \
+          tar
+    
+    - name: Setup vcpkg
+      run: |
+        git clone https://github.com/Microsoft/vcpkg.git
+        ./vcpkg/bootstrap-vcpkg.sh
+        ./vcpkg/vcpkg integrate install
+    
+    - name: Install vcpkg dependencies
+      run: |
+        ./vcpkg/vcpkg install \
+          tl-expected \
+          fmt \
+          spdlog \
+          gtest \
+          benchmark \
+          pegtl \
+          tbb
+    
+    - name: Configure CMake (Release with -O3, PGO OFF)
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake \
+          -DUSE_PGO=OFF \
+          -DENABLE_STATIC_ANALYSIS=OFF \
+          -DENABLE_WERROR=OFF \
+          -GNinja
+    
+    - name: Build LoreDB
+      run: cmake --build build --config Release
+    
+    - name: Run benchmarks
+      run: |
+        cd build
+        ./benchmarks --benchmark_format=json --benchmark_out=benchmark_results.json
+    
+    - name: Store benchmark result
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'googlecpp'
+        output-file-path: build/benchmark_results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        # Publish to gh-pages branch under dev/bench directory
+        gh-pages-branch: 'gh-pages'
+        benchmark-data-dir-path: 'dev/bench'
+        # Enable comment on PR
+        comment-on-alert: true
+        # Set alert threshold to 10%
+        alert-threshold: '110%'
+        # Mention @overra on regression
+        alert-comment-cc-users: '@overra'
+        # Fail the step if there is an alert
+        fail-on-alert: true
+        # Optional: Skip fetch-depth for faster checkout
+        fetch-depth: 1

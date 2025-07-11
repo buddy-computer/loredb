@@ -1,5 +1,8 @@
 # LoreDB
 
+[![Performance CI](https://github.com/buddy-computer/wiki-graph/workflows/Continuous%20Benchmarking/badge.svg)](https://github.com/buddy-computer/wiki-graph/actions/workflows/benchmark.yml)
+[![Benchmark Dashboard](https://img.shields.io/badge/Benchmark-Dashboard-blue)](https://buddy-computer.github.io/wiki-graph/dev/bench/)
+
 A modern, embeddable property graph database engine written in C++20, designed for high performance, extensibility, and robust concurrency.
 
 ## Architecture Overview
@@ -32,6 +35,32 @@ A modern, embeddable property graph database engine written in C++20, designed f
 - Modular design: Add new storage engines, query languages, or analytics modules.
 - CMake/vcpkg-based dependency management for easy integration and CI.
 - Follows modern C++ best practices (RAII, smart pointers, error handling with `tl::expected`).
+
+## Performance CI
+
+LoreDB includes continuous benchmarking to track performance across commits and PRs. The benchmark suite covers:
+
+- **Query Performance**: All major query operations (nodes, edges, traversals)
+- **Storage Operations**: Page store, file operations, and WAL performance
+- **Concurrency**: MVCC and lock manager performance under load
+- **Memory Usage**: Memory efficiency and leak detection
+
+### Benchmark Dashboard
+
+View real-time performance metrics at our [Benchmark Dashboard](https://buddy-computer.github.io/wiki-graph/dev/bench/). The dashboard shows:
+
+- Performance trends over time
+- Comparison between commits
+- Regression detection (alerts when performance drops >10%)
+- Detailed metrics for each benchmark
+
+### Performance Alerts
+
+The CI system automatically:
+- Runs benchmarks on every PR and main branch commit
+- Detects performance regressions >10% from previous commit
+- Posts PR comments with performance comparison tables
+- Mentions `@overra` when significant regressions are detected
 
 ## Getting Started
 
