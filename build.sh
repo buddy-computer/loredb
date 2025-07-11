@@ -28,6 +28,22 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Configuring for CPU=$CPU, PGO=$PGO, Config=$CONFIG"
+
+# Detect C++23 flag for Apple Clang
+CXX_FLAGS=""
+if [[ "$OSTYPE" == darwin* ]]; then
+  if clang++ --version 2>/dev/null | grep -q "Apple clang"; then
+    echo "Detected Apple Clang - using -std=c++2b for C++23 support"
+    CXX_FLAGS="-DCMAKE_CXX_FLAGS=-std=c++2b"
+  else
+    echo "Using standard C++23 flag"
+    CXX_FLAGS="-DCMAKE_CXX_FLAGS=-std=c++23"
+  fi
+else
+  echo "Using standard C++23 flag"
+  CXX_FLAGS="-DCMAKE_CXX_FLAGS=-std=c++23"
+fi
+
 if [[ "$CLEAN_BUILD" == "true" ]]; then
   echo "Cleaning build directory..."
   rm -rf "$BUILD_DIR"
@@ -40,9 +56,9 @@ cmake .. \
   $( [[ "$OSTYPE" == darwin* ]] && echo "-DAPPLE_CPU=$CPU" ) \
   -DUSE_PGO="$PGO" \
   -DCMAKE_BUILD_TYPE="$CONFIG" \
-  -DENABLE_WERROR=OFF
+  -DENABLE_WERROR=OFF \
+  $CXX_FLAGS
 
--cmake --build . -- -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
-+cmake --build . -- -j"$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)"
+cmake --build . -- -j"$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)"
 
 echo "Build complete in ./$BUILD_DIR/"

@@ -6,6 +6,8 @@
 #include <variant>
 #include <optional>
 #include <unordered_map>
+#include <map>
+#include <utility>
 
 namespace loredb::query::cypher {
 
@@ -17,7 +19,7 @@ struct Edge;
 
 // Base types
 using PropertyValue = std::variant<std::string, int64_t, double, bool>;
-using PropertyMap = std::unordered_map<std::string, PropertyValue>;
+using PropertyMap = std::map<std::string, PropertyValue>;
 
 // Expression types
 enum class ExpressionType {
@@ -64,30 +66,67 @@ struct Comparison {
     ComparisonOperator op;
     std::unique_ptr<Expression> right;
     
-    Comparison(std::unique_ptr<Expression> l, ComparisonOperator o, std::unique_ptr<Expression> r)
-        : left(std::move(l)), op(o), right(std::move(r)) {}
+    // Move constructor/destructor implementations to .cpp file for C++23 compatibility
+    Comparison(std::unique_ptr<Expression> l, ComparisonOperator o, std::unique_ptr<Expression> r);
+    ~Comparison();
+    
+    // Copy operations need special handling
+    Comparison(const Comparison&) = delete;
+    Comparison& operator=(const Comparison&) = delete;
+    
+    // Move operations
+    Comparison(Comparison&&) noexcept;
+    Comparison& operator=(Comparison&&) noexcept;
 };
 
 struct LogicalAnd {
     std::unique_ptr<Expression> left;
     std::unique_ptr<Expression> right;
     
-    LogicalAnd(std::unique_ptr<Expression> l, std::unique_ptr<Expression> r)
-        : left(std::move(l)), right(std::move(r)) {}
+    // Move constructor/destructor implementations to .cpp file for C++23 compatibility
+    LogicalAnd(std::unique_ptr<Expression> l, std::unique_ptr<Expression> r);
+    ~LogicalAnd();
+    
+    // Copy operations need special handling
+    LogicalAnd(const LogicalAnd&) = delete;
+    LogicalAnd& operator=(const LogicalAnd&) = delete;
+    
+    // Move operations
+    LogicalAnd(LogicalAnd&&) noexcept;
+    LogicalAnd& operator=(LogicalAnd&&) noexcept;
 };
 
 struct LogicalOr {
     std::unique_ptr<Expression> left;
     std::unique_ptr<Expression> right;
     
-    LogicalOr(std::unique_ptr<Expression> l, std::unique_ptr<Expression> r)
-        : left(std::move(l)), right(std::move(r)) {}
+    // Move constructor/destructor implementations to .cpp file for C++23 compatibility
+    LogicalOr(std::unique_ptr<Expression> l, std::unique_ptr<Expression> r);
+    ~LogicalOr();
+    
+    // Copy operations need special handling
+    LogicalOr(const LogicalOr&) = delete;
+    LogicalOr& operator=(const LogicalOr&) = delete;
+    
+    // Move operations
+    LogicalOr(LogicalOr&&) noexcept;
+    LogicalOr& operator=(LogicalOr&&) noexcept;
 };
 
 struct LogicalNot {
     std::unique_ptr<Expression> operand;
     
-    explicit LogicalNot(std::unique_ptr<Expression> op) : operand(std::move(op)) {}
+    // Move constructor/destructor implementations to .cpp file for C++23 compatibility
+    explicit LogicalNot(std::unique_ptr<Expression> op);
+    ~LogicalNot();
+    
+    // Copy operations need special handling
+    LogicalNot(const LogicalNot&) = delete;
+    LogicalNot& operator=(const LogicalNot&) = delete;
+    
+    // Move operations
+    LogicalNot(LogicalNot&&) noexcept;
+    LogicalNot& operator=(LogicalNot&&) noexcept;
 };
 
 // Expression variant
@@ -106,7 +145,17 @@ struct Expression {
     Expression(T&& val) : content(std::forward<T>(val)) {}
     
     ExpressionType type() const {
-        return static_cast<ExpressionType>(content.index());
+        // C++23 std::unreachable() optimization for variant index mapping
+        switch (content.index()) {
+            case 0: return ExpressionType::LITERAL;
+            case 1: return ExpressionType::PROPERTY_ACCESS;
+            case 2: return ExpressionType::IDENTIFIER;
+            case 3: return ExpressionType::COMPARISON;
+            case 4: return ExpressionType::LOGICAL_AND;
+            case 5: return ExpressionType::LOGICAL_OR;
+            case 6: return ExpressionType::LOGICAL_NOT;
+            default: std::unreachable();
+        }
     }
 };
 

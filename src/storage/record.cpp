@@ -1,7 +1,35 @@
 #include "record.h"
 #include <cstring>
+#include <bit>
 
 namespace loredb::storage {
+
+// C++23 std::byteswap-based endianness helpers for consistent serialization
+namespace {
+    constexpr bool is_little_endian() noexcept {
+        return std::endian::native == std::endian::little;
+    }
+    
+    // Convert host byte order to little-endian (for consistent serialization)
+    template<typename T>
+    constexpr T host_to_le(T value) noexcept {
+        if constexpr (is_little_endian()) {
+            return value;
+        } else {
+            return std::byteswap(value);
+        }
+    }
+    
+    // Convert little-endian to host byte order (for deserialization)
+    template<typename T>
+    constexpr T le_to_host(T value) noexcept {
+        if constexpr (is_little_endian()) {
+            return value;
+        } else {
+            return std::byteswap(value);
+        }
+    }
+}
 
 std::vector<uint8_t> RecordSerializer::serialize_properties(const std::vector<Property>& properties) {
     std::vector<uint8_t> buffer;
@@ -62,9 +90,21 @@ util::expected<std::vector<Property>, Error> RecordSerializer::deserialize_prope
 std::vector<uint8_t> RecordSerializer::serialize_node(const NodeRecord& node, const std::vector<Property>& properties) {
     std::vector<uint8_t> buffer;
     
-    // Write node record header
+    // Write node record header with endianness conversion
     buffer.resize(sizeof(NodeRecord));
-    std::memcpy(buffer.data(), &node, sizeof(NodeRecord));
+    
+    // Use C++23 std::byteswap for consistent serialization
+    NodeRecord le_node;
+    le_node.id = host_to_le(node.id);
+    le_node.label_count = host_to_le(node.label_count);
+    le_node.property_count = host_to_le(node.property_count);
+    le_node.in_degree = host_to_le(node.in_degree);
+    le_node.out_degree = host_to_le(node.out_degree);
+    le_node.property_offset = host_to_le(node.property_offset);
+    le_node.in_edges_offset = host_to_le(node.in_edges_offset);
+    le_node.out_edges_offset = host_to_le(node.out_edges_offset);
+    
+    std::memcpy(buffer.data(), &le_node, sizeof(NodeRecord));
     
     // Write properties
     auto prop_data = serialize_properties(properties);
@@ -79,8 +119,19 @@ RecordSerializer::deserialize_node(std::span<const uint8_t> data) {
         return util::unexpected(Error{ErrorCode::CORRUPTION, "Insufficient data for node record"});
     }
     
+    NodeRecord le_node;
+    std::memcpy(&le_node, data.data(), sizeof(NodeRecord));
+    
+    // Use C++23 std::byteswap for consistent deserialization
     NodeRecord node;
-    std::memcpy(&node, data.data(), sizeof(NodeRecord));
+    node.id = le_to_host(le_node.id);
+    node.label_count = le_to_host(le_node.label_count);
+    node.property_count = le_to_host(le_node.property_count);
+    node.in_degree = le_to_host(le_node.in_degree);
+    node.out_degree = le_to_host(le_node.out_degree);
+    node.property_offset = le_to_host(le_node.property_offset);
+    node.in_edges_offset = le_to_host(le_node.in_edges_offset);
+    node.out_edges_offset = le_to_host(le_node.out_edges_offset);
     
     auto prop_data = data.subspan(sizeof(NodeRecord));
     auto properties_result = deserialize_properties(prop_data);
@@ -94,9 +145,20 @@ RecordSerializer::deserialize_node(std::span<const uint8_t> data) {
 std::vector<uint8_t> RecordSerializer::serialize_edge(const EdgeRecord& edge, const std::vector<Property>& properties) {
     std::vector<uint8_t> buffer;
     
-    // Write edge record header
+    // Write edge record header with endianness conversion
     buffer.resize(sizeof(EdgeRecord));
-    std::memcpy(buffer.data(), &edge, sizeof(EdgeRecord));
+    
+    // Use C++23 std::byteswap for consistent serialization
+    EdgeRecord le_edge;
+    le_edge.id = host_to_le(edge.id);
+    le_edge.from_node = host_to_le(edge.from_node);
+    le_edge.to_node = host_to_le(edge.to_node);
+    le_edge.label_id = host_to_le(edge.label_id);
+    le_edge.property_count = host_to_le(edge.property_count);
+    le_edge.property_offset = host_to_le(edge.property_offset);
+    le_edge.timestamp = host_to_le(edge.timestamp);
+    
+    std::memcpy(buffer.data(), &le_edge, sizeof(EdgeRecord));
     
     // Write properties
     auto prop_data = serialize_properties(properties);
@@ -111,8 +173,18 @@ RecordSerializer::deserialize_edge(std::span<const uint8_t> data) {
         return util::unexpected(Error{ErrorCode::CORRUPTION, "Insufficient data for edge record"});
     }
     
+    EdgeRecord le_edge;
+    std::memcpy(&le_edge, data.data(), sizeof(EdgeRecord));
+    
+    // Use C++23 std::byteswap for consistent deserialization
     EdgeRecord edge;
-    std::memcpy(&edge, data.data(), sizeof(EdgeRecord));
+    edge.id = le_to_host(le_edge.id);
+    edge.from_node = le_to_host(le_edge.from_node);
+    edge.to_node = le_to_host(le_edge.to_node);
+    edge.label_id = le_to_host(le_edge.label_id);
+    edge.property_count = le_to_host(le_edge.property_count);
+    edge.property_offset = le_to_host(le_edge.property_offset);
+    edge.timestamp = le_to_host(le_edge.timestamp);
     
     auto prop_data = data.subspan(sizeof(EdgeRecord));
     auto properties_result = deserialize_properties(prop_data);
@@ -170,8 +242,12 @@ void RecordSerializer::write_property_value(std::vector<uint8_t>& buffer, const 
             write_varint(buffer, util::ZigZag::encode(v));
         } else if constexpr (std::is_same_v<T, double>) {
             buffer.push_back(static_cast<uint8_t>(PropertyType::FLOAT));
+            // Use C++23 std::byteswap for consistent endianness
+            uint64_t bits;
+            std::memcpy(&bits, &v, sizeof(double));
+            uint64_t le_bits = host_to_le(bits);
             buffer.resize(buffer.size() + sizeof(double));
-            std::memcpy(buffer.data() + buffer.size() - sizeof(double), &v, sizeof(double));
+            std::memcpy(buffer.data() + buffer.size() - sizeof(double), &le_bits, sizeof(double));
         } else if constexpr (std::is_same_v<T, bool>) {
             buffer.push_back(static_cast<uint8_t>(PropertyType::BOOLEAN));
             buffer.push_back(v ? 1 : 0);
@@ -205,8 +281,12 @@ util::expected<PropertyValue, Error> RecordSerializer::read_property_value(std::
             if (data.size() < sizeof(double)) {
                 return util::unexpected<storage::Error>(Error{ErrorCode::CORRUPTION, "Insufficient data for float"});
             }
+            // Use C++23 std::byteswap for consistent endianness
+            uint64_t le_bits;
+            std::memcpy(&le_bits, data.data(), sizeof(double));
+            uint64_t host_bits = le_to_host(le_bits);
             double value;
-            std::memcpy(&value, data.data(), sizeof(double));
+            std::memcpy(&value, &host_bits, sizeof(double));
             data = data.subspan(sizeof(double));
             return PropertyValue{value};
         }

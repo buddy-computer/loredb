@@ -1,15 +1,15 @@
 #pragma once
 
-// Use TartanLlama's expected implementation
-#include <tl/expected.hpp>
+// Use C++23 std::expected implementation
+#include <expected>
 
 namespace loredb::util {
 
-// Alias TartanLlama's expected to our namespace
+// Alias std::expected to our namespace
 template<typename T, typename E>
-using expected = tl::expected<T, E>;
+using expected = std::expected<T, E>;
 
 template<typename E>
-using unexpected = tl::unexpected<E>;
+using unexpected = std::unexpected<E>;
 
 }  // namespace loredb::util

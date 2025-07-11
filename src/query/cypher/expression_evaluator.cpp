@@ -1,6 +1,7 @@
 #include "expression_evaluator.h"
 #include "../../storage/graph_store.h"
 #include <iostream>
+#include <utility>
 
 namespace loredb::query::cypher {
 
@@ -126,6 +127,8 @@ util::expected<bool, storage::Error> evaluate_boolean_expression(const Expressio
                     case ComparisonOperator::GREATER_THAN: return left_num > right_num;
                     case ComparisonOperator::GREATER_EQUAL: return left_num >= right_num;
                 }
+                // C++23 std::unreachable() for optimizer hint - all enum values handled above
+                std::unreachable();
             } else {
                 // Fall back to string comparison for non-numeric values
                 std::string left_str = property_value_to_string(left_value);
@@ -139,6 +142,8 @@ util::expected<bool, storage::Error> evaluate_boolean_expression(const Expressio
                     case ComparisonOperator::GREATER_THAN: return left_str > right_str;
                     case ComparisonOperator::GREATER_EQUAL: return left_str >= right_str;
                 }
+                // C++23 std::unreachable() for optimizer hint - all enum values handled above
+                std::unreachable();
             }
             break;
         }

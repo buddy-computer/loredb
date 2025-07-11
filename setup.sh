@@ -189,15 +189,15 @@ install_system_deps() {
 
 # Check compiler requirements
 check_compiler() {
-    log_info "Checking C++ compiler..."
+    log_info "Checking C++ compiler for C++23 support..."
     
     if command_exists g++; then
         GCC_VERSION=$(g++ -dumpversion | cut -d. -f1)
         if [[ $GCC_VERSION -ge 11 ]]; then
-            log_success "GCC $GCC_VERSION found (C++20 compatible)"
+            log_success "GCC $GCC_VERSION found (C++23 compatible)"
             return 0
         else
-            log_warning "GCC $GCC_VERSION found, but GCC 11+ is required. Checking for g++-11."
+            log_warning "GCC $GCC_VERSION found, but GCC 11+ is required for C++23. Checking for g++-11."
         fi
     fi
     
@@ -206,11 +206,18 @@ check_compiler() {
         log_info "Found g++-11. Setting it as the compiler."
         export CC=gcc-11
         export CXX=g++-11
-        log_success "Using CXX=$CXX (C++20 compatible)"
+        log_success "Using CXX=$CXX (C++23 compatible)"
         return 0
     fi
     
     if command_exists clang++; then
+        # Check if this is Apple Clang
+        if clang++ --version 2>/dev/null | grep -q "Apple clang"; then
+            log_info "Detected Apple Clang - supports C++23 with -std=c++2b"
+            log_success "Apple Clang found (C++23 compatible)"
+            return 0
+        fi
+        
         # Try to get version using robust methods
         # First try -dumpfullversion (Clang 16+), then fall back to -dumpversion
         CLANG_FULL_VERSION=""
@@ -232,15 +239,15 @@ check_compiler() {
             
             # Handle case where version might be empty or non-numeric
             if [[ "$CLANG_MAJOR_VERSION" =~ ^[0-9]+$ ]] && [[ $CLANG_MAJOR_VERSION -ge 14 ]]; then
-                log_success "Clang $CLANG_FULL_VERSION (major: $CLANG_MAJOR_VERSION) found (C++20 compatible)"
+                log_success "Clang $CLANG_FULL_VERSION (major: $CLANG_MAJOR_VERSION) found (C++23 compatible)"
                 return 0
             else
-                log_warning "Clang $CLANG_FULL_VERSION (major: $CLANG_MAJOR_VERSION) found, but Clang 14+ required for C++20"
+                log_warning "Clang $CLANG_FULL_VERSION (major: $CLANG_MAJOR_VERSION) found, but Clang 14+ required for C++23"
             fi
         fi
     fi
     
-    log_error "No suitable C++20 compiler found"
+    log_error "No suitable C++23 compiler found"
     case $OS in
         ubuntu)
             log_error "Install with: sudo apt-get install gcc-11 g++-11"
